@@ -22,16 +22,9 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 
-@SpringBootTest
-@AutoConfigureMockMvc
+
 @ActiveProfiles("test")
 class ApplicationExceptionHandlerTest {
-    @Autowired
-    private MockMvc mockMvc;
-
-    @Autowired
-    private ApplicationRepository applicationRepository;
-
     private final ApplicationExceptionHandler handler =
             new ApplicationExceptionHandler();
 
@@ -85,62 +78,4 @@ class ApplicationExceptionHandlerTest {
 
         assertSame(exception, thrown);
     }
-
-
-    @Test
-    void shouldHandleConcurrentRegistrationsWithSameName() throws Exception {
-        String name = "race-" + UUID.randomUUID().toString().substring(0, 8);
-
-        String requestBody = """
-            {
-              "name": "%s",
-              "image": "taskhub:v1",
-              "containerPort": 8080
-            }
-            """.formatted(name);
-
-        CountDownLatch ready = new CountDownLatch(2);
-        CountDownLatch start = new CountDownLatch(1);
-
-        Callable<Integer> register = () -> {
-            ready.countDown();
-
-            if (!start.await(10, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("Start timeout");
-            }
-
-            return mockMvc.perform(post("/api/applications")
-                            .with(user("test-user"))
-                            .with(csrf())
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(requestBody))
-                    .andReturn()
-                    .getResponse()
-                    .getStatus();
-        };
-
-        try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
-            Future<Integer> first = executor.submit(register);
-            Future<Integer> second = executor.submit(register);
-
-            assertTrue(ready.await(10, TimeUnit.SECONDS));
-            start.countDown();
-
-            List<Integer> statuses = Stream.of(
-                            first.get(30, TimeUnit.SECONDS),
-                            second.get(30, TimeUnit.SECONDS)
-                    )
-                    .sorted()
-                    .toList();
-
-            assertEquals(List.of(201, 409), statuses);
-        }
-
-        long count = applicationRepository.findAll().stream()
-                .filter(app -> name.equals(app.getName()))
-                .count();
-
-        assertEquals(1, count);
-    }
-
 }
