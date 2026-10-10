@@ -5,6 +5,7 @@ import jakarta.validation.constraints.*;
 public record CreateApplicationRequest(
         @NotBlank
         @Size(max = 30)
+        @Pattern(regexp = "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$")
         String name,
 
         @NotBlank
