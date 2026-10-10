@@ -107,7 +107,6 @@ rivet/
 │   │   └── resources/        # Configuração e migrações Flyway
 │   └── test/                 # Testes e recursos de teste
 ├── .env.example             # Modelo de configuração, sem credenciais reais
-├── AGENTS.md                # Instruções específicas para agentes de código
 ├── build.gradle.kts
 └── settings.gradle.kts
 ```
