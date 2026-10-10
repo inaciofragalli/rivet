@@ -253,4 +253,19 @@ class ApplicationControllerIntegrationTest {
                     .andExpect(status().isBadRequest());
         }
     }
+
+    @Nested
+    class ListApplications {
+
+        @Test
+        @WithMockUser
+        void shouldReturnEmptyListWhenNoApplicationsExist() throws Exception {
+            mockMvc.perform(get("/api/applications"))
+                    .andExpectAll(
+                            status().isOk(),
+                            content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON),
+                            jsonPath("$.length()").value(0)
+                    );
+        }
+    }
 }
