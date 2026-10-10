@@ -52,8 +52,6 @@ public class ApplicationExceptionHandler {
             cause = cause.getCause();
         }
 
-        assert e != null;
-
         throw e;
     }
 }
