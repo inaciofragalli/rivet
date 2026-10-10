@@ -109,6 +109,15 @@ Por padrão, a API fica em `http://localhost:8080`. O springdoc disponibiliza Op
 
 Sem o perfil `dev`, vale a configuração restante do Spring Security. A autenticação administrativa própria do Rivet ainda está pendente.
 
+### Documentação da API
+
+Com o backend em execução, a documentação da API fica disponível em:
+
+- [Swagger UI](http://localhost:8080/swagger-ui/index.html): interface para consultar e testar os endpoints.
+- [OpenAPI JSON](http://localhost:8080/v3/api-docs): especificação OpenAPI gerada pelo Springdoc.
+
+O Springdoc gera a documentação a partir dos controllers e modelos da aplicação. Atualmente, o módulo `application` disponibiliza endpoints para cadastrar, consultar e listar aplicações.
+
 ### Testar
 
 Com Docker em execução:
