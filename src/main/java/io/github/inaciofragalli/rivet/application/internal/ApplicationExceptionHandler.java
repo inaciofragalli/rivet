@@ -52,6 +52,6 @@ public class ApplicationExceptionHandler {
             cause = cause.getCause();
         }
 
-        throw e;
+        throw Objects.requireNonNull(e, "Exception must not be null");
     }
 }
