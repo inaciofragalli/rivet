@@ -245,5 +245,12 @@ class ApplicationControllerIntegrationTest {
                             jsonPath("$.length()").value(2)
                     );
         }
+
+        @Test
+        @WithMockUser
+        void shouldReturnBadRequestWhenIdIsMalformed() throws Exception {
+            mockMvc.perform(get("/api/applications/not-a-uuid"))
+                    .andExpect(status().isBadRequest());
+        }
     }
 }
