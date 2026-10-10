@@ -10,12 +10,4 @@ public record ApplicationResponse(
         String image,
         Integer containerPort
 ) {
-    public static ApplicationResponse from(Application application) {
-        return new ApplicationResponse(
-                application.getId(),
-                application.getName(),
-                application.getImage(),
-                application.getContainerPort()
-        );
-    }
 }
