@@ -16,9 +16,15 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.web.servlet.MockMvc;
 import io.github.inaciofragalli.rivet.TestcontainersConfiguration;
 
+import java.util.List;
+import java.util.UUID;
+import java.util.concurrent.*;
 import java.util.stream.Stream;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -135,6 +141,62 @@ class ApplicationControllerIntegrationTest {
                         }
                         """)
             );
+        }
+
+        @Test
+        void shouldHandleConcurrentRegistrationsWithSameName() throws Exception {
+            String name = "race-" + UUID.randomUUID().toString().substring(0, 8);
+
+            String requestBody = """
+            {
+              "name": "%s",
+              "image": "taskhub:v1",
+              "containerPort": 8080
+            }
+            """.formatted(name);
+
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch start = new CountDownLatch(1);
+
+            Callable<Integer> register = () -> {
+                ready.countDown();
+
+                if (!start.await(10, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("Start timeout");
+                }
+
+                return mockMvc.perform(post("/api/applications")
+                                .with(user("test-user"))
+                                .with(csrf())
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(requestBody))
+                        .andReturn()
+                        .getResponse()
+                        .getStatus();
+            };
+
+            try (ExecutorService executor = Executors.newFixedThreadPool(2)) {
+                Future<Integer> first = executor.submit(register);
+                Future<Integer> second = executor.submit(register);
+
+                assertTrue(ready.await(10, TimeUnit.SECONDS));
+                start.countDown();
+
+                List<Integer> statuses = Stream.of(
+                                first.get(30, TimeUnit.SECONDS),
+                                second.get(30, TimeUnit.SECONDS)
+                        )
+                        .sorted()
+                        .toList();
+
+                assertEquals(List.of(201, 409), statuses);
+            }
+
+            long count = applicationRepository.findAll().stream()
+                    .filter(app -> name.equals(app.getName()))
+                    .count();
+
+            assertEquals(1, count);
         }
     }
 
