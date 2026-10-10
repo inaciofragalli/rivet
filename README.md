@@ -1,72 +1,87 @@
 # Rivet
 
-**Build here. Run anywhere.**
+O Rivet é uma plataforma para implantar e gerenciar aplicações em infraestrutura própria. A ideia é centralizar tarefas que hoje seriam feitas com Docker e SSH, como cadastrar aplicações e servidores, implantar versões e acompanhar o estado das implantações.
 
-O **Rivet** é uma plataforma de implantação e gerenciamento de aplicações em infraestrutura própria. A proposta é reunir, em uma interface, operações que normalmente exigiriam comandos manuais de Docker e SSH: registrar aplicações, implantar versões, acompanhar o estado dos contêineres e consultar o histórico de implantações.
+A primeira versão foi pensada para hospedagem pessoal em um servidor Linux modesto. Integrações com GitHub, builds automáticos, suporte a vários servidores e observabilidade mais avançada ficam para etapas posteriores.
 
-O projeto começa como uma solução de **hospedagem pessoal**, pensada para funcionar em um único servidor Linux com recursos modestos. A longo prazo, poderá incluir integração com GitHub, builds automatizados, múltiplos servidores e recursos de observabilidade.
-
-> **Estado do projeto:** desenvolvimento inicial. As funcionalidades de implantação descritas abaixo são objetivos do MVP, **não recursos já implementados**.
+> **Estado atual:** já é possível cadastrar aplicações e consultá-las pela API. Cadastro de servidores, operações SSH, execução de containers, histórico de deployments e autenticação administrativa definitiva ainda não foram implementados.
 
 ## Repositórios
 
-O Rivet usa repositórios separados:
+O backend e o painel web ficam em repositórios separados:
 
-- **`rivet`** (este repositório): backend, API e lógica de gerenciamento da infraestrutura.
-- **`rivet-frontend`**: painel web em React e TypeScript, desenvolvido separadamente.
+- [`rivet`](https://github.com/inaciofragalli/rivet): este repositório, com a API e a futura lógica de gerenciamento da infraestrutura.
+- [`rivet-frontend`](https://github.com/inaciofragalli/rivet-frontend): painel web em React e TypeScript.
 
-## Stack do backend
+## Tecnologias
 
-- Java 21 e Spring Boot 4
-- Gradle com Kotlin DSL
-- Spring Web MVC, Spring Security e Validation
+- Java 21, Spring Boot 4.1.1 e Gradle Kotlin DSL
+- Spring Web MVC, Spring Security e Bean Validation
 - Spring Data JPA, PostgreSQL e Flyway
 - Spring Modulith (monólito modular)
-- springdoc-openapi (contrato e documentação da API)
-- JUnit e Testcontainers para testes
+- springdoc-openapi (OpenAPI e Swagger UI)
+- JUnit, MockMvc e Testcontainers para testes
+- GitHub Actions para CI e Qodana para análise estática
 
-**Arquitetura planejada:** módulos de negócio como `applications`, `deployments` e `servers`, com responsabilidades separadas das integrações de Docker e SSH. Os módulos serão introduzidos conforme a implementação avançar.
+O primeiro módulo de negócio, `application`, fica em `io.github.inaciofragalli.rivet.application`. Os módulos de servidores e deployments ainda serão desenvolvidos. Os detalhes do módulo estão em [application.md](docs/architecture/modules/application.md); o histórico da decisão sobre persistência de eventos está no [ADR 0001](docs/adr/0001-modulith-jpa.md).
+
+## O que já funciona
+
+| Método | Rota | Comportamento |
+| --- | --- | --- |
+| `POST` | `/api/applications` | Registra aplicação; retorna `201 Created` e `Location` |
+| `GET` | `/api/applications/{id}` | Busca por UUID; retorna `200 OK` ou `404 Not Found` |
+| `GET` | `/api/applications` | Lista aplicações; retorna `200 OK` (inclusive lista vazia) |
+
+No cadastro são informados `name`, `image` e `containerPort`. O nome deve ser único, ter no máximo 30 caracteres e começar com letra ou número. Depois do primeiro caractere, aceita também `_`, `.` e `-`. A imagem é obrigatória, e a porta deve estar entre 1 e 65535. Dados inválidos retornam `400 Bad Request`; nomes já cadastrados retornam `409 Conflict`.
+
+Por enquanto, a API guarda a configuração da aplicação. Ela ainda não inicia containers nem registra deployments. As respostas de erro seguem o formato *Problem Details*.
 
 ## Objetivo do MVP
 
-Permitir que um administrador implante, em um servidor Linux próprio, uma aplicação HTTP a partir de uma **imagem Docker já construída**, sem precisar executar manualmente todo o processo de implantação.
+O MVP deve permitir que um administrador implante uma aplicação HTTP em um servidor Linux próprio, usando uma imagem Docker já construída. O Rivet ficará responsável pelas operações que, sem a ferramenta, precisariam ser feitas manualmente.
 
-O fluxo pretendido é:
+O fluxo planejado é:
 
 1. Preparar uma imagem Docker fora do servidor de destino.
-2. Cadastrar o servidor e a aplicação no Rivet.
-3. Solicitar uma implantação pelo painel ou pela API.
-4. Transferir/carregar a imagem e iniciar o container por meio de uma conexão SSH confiável.
-5. Verificar o resultado e registrar estado, erros e histórico da implantação.
-6. Publicar, quando desejado, a aplicação via HTTPS; inicialmente, a configuração de túnel/domínio poderá ser manual.
+2. Cadastrar a aplicação e o servidor no Rivet.
+3. Solicitar uma implantação pela API ou pelo painel.
+4. Transferir ou disponibilizar a imagem e iniciar o container por SSH, com autenticação por chave e verificação da *host key*.
+5. Verificar o resultado, registrar estado e erros e permitir consultar o histórico.
+6. Expor a aplicação por HTTPS quando desejado; inicialmente, a configuração de domínio/túnel poderá ser manual.
 
-O **painel administrativo permanece privado**, mesmo que as aplicações hospedadas sejam acessíveis pela internet.
+O painel administrativo deverá continuar privado, inclusive quando as aplicações implantadas estiverem acessíveis pela internet.
 
-**Fora do MVP:** builds automáticos a partir do GitHub, Kubernetes, múltiplos nós, equipes, cobrança e orquestração distribuída.
+Ficam fora do MVP os builds automáticos a partir de repositórios GitHub, Kubernetes, múltiplos nós, equipes, cobrança e orquestração distribuída.
+
+## Segurança
+
+Existe uma configuração temporária para o perfil `dev` que permite todas as requisições e desabilita CSRF. Ela serve para desenvolvimento local. **Não use esse perfil em produção nem em ambientes expostos.**
+
+A autenticação administrativa e a forma de guardar credenciais SSH ainda precisam ser definidas e implementadas. O planejamento prevê que chaves privadas, tokens e senhas não sejam versionados nem apareçam em logs. As conexões SSH também deverão verificar a identidade do servidor remoto.
 
 ## Desenvolvimento local
 
 ### Pré-requisitos
 
 - JDK 21
-- PostgreSQL acessível localmente
+- PostgreSQL local para **executar a aplicação**
+- Docker instalado e daemon acessível para **executar os testes de integração com Testcontainers**
 - Git
 
-Docker será necessário para executar ou testar funcionalidades de implantação e pode ser utilizado pelos testes com Testcontainers.
+O repositório já inclui o Gradle Wrapper, então não é necessário instalar o Gradle separadamente.
 
-### Banco de dados
+### Banco de dados e configuração
 
-Crie um banco PostgreSQL e um usuário com permissão sobre ele. O esquema da aplicação será gerenciado por **migrações Flyway**; não utilize geração automática de tabelas pelo Hibernate.
+Crie um banco PostgreSQL e um usuário com acesso a ele. O Flyway controla as migrações do esquema; o Hibernate fica com `spring.jpa.hibernate.ddl-auto=validate` e não cria as tabelas automaticamente.
 
-### Variáveis de ambiente
-
-Crie o arquivo `.env` na raiz do projeto com base em `.env.example`:
+Na raiz do projeto:
 
 ```bash
 cp .env.example .env
 ```
 
-Configure os valores de acordo com o PostgreSQL local:
+Exemplo de configuração local:
 
 ```dotenv
 DB_HOST=localhost
@@ -76,49 +91,69 @@ DB_USERNAME=rivet
 DB_PASSWORD=defina_sua_senha_local
 ```
 
-As variáveis de conexão são **obrigatórias, sem valores de fallback**. O arquivo `.env` contém credenciais locais e **não deve ser versionado**. A importação pelo Spring Boot depende da configuração correspondente em `application.properties` e da execução a partir da raiz do projeto.
+As variáveis de conexão são obrigatórias e não têm valores padrão. O arquivo `.env` é ignorado pelo Git e não deve ser versionado com credenciais. O `application.properties` já faz a importação opcional a partir da raiz do projeto:
+
+```properties
+spring.config.import=optional:file:./.env[.properties]
+```
 
 ### Executar
 
-Na raiz do repositório:
+Para desenvolvimento local, usando a configuração de segurança exclusiva do perfil `dev`:
 
 ```bash
-./gradlew bootRun
+SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
 ```
 
+Por padrão, a API fica em `http://localhost:8080`. O springdoc disponibiliza OpenAPI e Swagger UI nos caminhos padrão, que devem ser conferidos ao executar a aplicação caso haja mudanças na configuração.
+
+Sem o perfil `dev`, vale a configuração restante do Spring Security. A autenticação administrativa própria do Rivet ainda está pendente.
+
+### Documentação da API
+
+Com o backend em execução, a documentação da API fica disponível em:
+
+- [Swagger UI](http://localhost:8080/swagger-ui/index.html): interface para consultar e testar os endpoints.
+- [OpenAPI JSON](http://localhost:8080/v3/api-docs): especificação OpenAPI gerada pelo Springdoc.
+
+O Springdoc gera a documentação a partir dos controllers e modelos da aplicação. Atualmente, o módulo `application` disponibiliza endpoints para cadastrar, consultar e listar aplicações.
+
 ### Testar
+
+Com Docker em execução:
 
 ```bash
 ./gradlew test --no-daemon
 ./gradlew build
 ```
 
-Testes que inicializam o contexto Spring podem exigir um banco PostgreSQL de testes e variáveis `DB_*` apropriadas. O workflow de CI provisiona um PostgreSQL temporário para os testes.
+Os testes de integração usam PostgreSQL 17 via Testcontainers e `@ServiceConnection`, com um banco separado do ambiente de desenvolvimento. No CI, não é preciso configurar um serviço PostgreSQL à parte nem fornecer segredos `DB_*`. A análise do Qodana roda em outro workflow.
 
-## Organização
+## Estrutura do repositório
 
 ```text
 rivet/
-├── .github/workflows/       # Integração contínua
-├── docs/                    # Documentação e decisões arquiteturais
+├── .github/workflows/             # CI e Qodana
+├── docs/
+│   ├── architecture/modules/      # Documentação de módulos implementados
+│   └── adr/                       # Registros de decisões arquiteturais
 ├── src/
 │   ├── main/
-│   │   ├── java/             # Aplicação e futuros módulos de negócio
-│   │   └── resources/        # Configuração e migrações Flyway
-│   └── test/                 # Testes e recursos de teste
-├── .env.example             # Modelo de configuração, sem credenciais reais
+│   │   ├── java/io/github/inaciofragalli/rivet/
+│   │   │   ├── application/       # Módulo application e pacote internal/
+│   │   │   └── security/          # Configuração de segurança de desenvolvimento
+│   │   └── resources/db/migration/ # Migrações Flyway
+│   └── test/                     # Testes unitários, integração e modularidade
+├── .env.example
 ├── build.gradle.kts
 └── settings.gradle.kts
 ```
 
-A estrutura acima representa a **organização prevista**; alguns diretórios e arquivos poderão ser adicionados ao longo do desenvolvimento.
+## Próximas etapas
 
-## Próximos marcos
+1. Implementar cadastro e gerenciamento de servidores, preparando a integração SSH.
+2. Implementar deployments de imagens prontas com verificação do estado real do container.
+3. Integrar as operações com o painel React/TypeScript.
+4. Validar um deployment real no servidor doméstico, com administração privada e publicação HTTPS.
 
-1. Concluir a base do backend: segurança, banco, migrações e verificação de limites com Spring Modulith.
-2. Implementar o cadastro de servidores e aplicações.
-3. Criar o ciclo de implantação de imagens Docker por SSH, com persistência de estados e tratamento de falhas.
-4. Expor o histórico e o estado observado das aplicações por meio da API e do painel.
-5. Validar a implantação de uma aplicação real no servidor doméstico, com acesso HTTPS e administração privada.
-
-Após o MVP, as evoluções candidatas incluem imagens em registry (por exemplo, GHCR), integração com GitHub Actions, atualização/rollback, stacks Docker Compose e suporte a outros servidores.
+Depois do MVP, estão previstas como possibilidades a integração com GitHub, builds automatizados, atualização/rollback, stacks Docker Compose e suporte a mais servidores.
