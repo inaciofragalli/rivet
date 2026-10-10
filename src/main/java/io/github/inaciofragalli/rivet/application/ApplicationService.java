@@ -23,20 +23,20 @@ public class ApplicationService {
         Application app = new Application(name, image, containerPort);
         applicationRepository.save(app);
 
-        return ApplicationResponse.from(app);
+        return toResponse(app);
     }
 
     public ApplicationResponse findById(UUID id) {
         Application app = applicationRepository.findById(id)
                 .orElseThrow(() -> new ApplicationNotFoundException(id.toString()));
 
-        return ApplicationResponse.from(app);
+        return toResponse(app);
     }
 
     public List<ApplicationResponse> findAll() {
         List<Application> apps = applicationRepository.findAll();
 
-        return apps.stream().map(ApplicationResponse::from).toList();
+        return apps.stream().map(this::toResponse).toList();
     }
 
     private ApplicationResponse toResponse(Application application) {
