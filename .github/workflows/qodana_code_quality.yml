@@ -36,5 +36,5 @@ jobs:
           use-caches: true
           post-pr-comment: ${{ github.event_name == 'pull_request' }}
           use-annotations: true
-          upload-result: false
+          upload-result: true
           push-fixes: none
