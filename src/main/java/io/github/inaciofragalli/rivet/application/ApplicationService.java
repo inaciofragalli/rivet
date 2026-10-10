@@ -38,4 +38,13 @@ public class ApplicationService {
 
         return apps.stream().map(ApplicationResponse::from).toList();
     }
+
+    private ApplicationResponse toResponse(Application application) {
+        return new ApplicationResponse(
+                application.getId(),
+                application.getName(),
+                application.getImage(),
+                application.getContainerPort()
+        );
+    }
 }
