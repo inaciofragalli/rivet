@@ -12,6 +12,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.UUID;
 import java.util.stream.Stream;
+import java.nio.file.attribute.FileTime;
+import java.time.Duration;
+import java.time.Instant;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -92,4 +95,43 @@ class ImageArchiveStorageTest {
                 () -> storage.delete(externalFile)
         );
     }
+
+
+    @Test
+    void shouldRemoveStaleTemporaryFiles() throws IOException {
+        Path oldFile = Files.createTempFile(
+                tempDir, "image-", ".tmp"
+        );
+
+        Files.setLastModifiedTime(
+                oldFile,
+                FileTime.from(Instant.now().minus(Duration.ofHours(3)))
+        );
+
+        storage.cleanUpStaleFiles();
+
+        assertFalse(Files.exists(oldFile));
+    }
+
+    @Test
+    void shouldPreserveRecentAndPermanentFiles() throws IOException {
+        Path recentFile = Files.createTempFile(
+                tempDir, "image-", ".tmp"
+        );
+
+        Path permanentFile = Files.createFile(
+                tempDir.resolve("saved.archive")
+        );
+
+        Files.setLastModifiedTime(
+                permanentFile,
+                FileTime.from(Instant.now().minus(Duration.ofHours(3)))
+        );
+
+        storage.cleanUpStaleFiles();
+
+        assertTrue(Files.exists(recentFile));
+        assertTrue(Files.exists(permanentFile));
+    }
+
 }
