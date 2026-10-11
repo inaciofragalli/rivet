@@ -6,6 +6,7 @@ public record ApplicationResponse(
         UUID id,
         String name,
         String image,
-        Integer containerPort
+        Integer containerPort,
+        UUID imageArtifactId
 ) {
 }

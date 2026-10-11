@@ -25,9 +25,22 @@ public class Application {
     @Column(name = "container_port", nullable = false)
     private Integer containerPort;
 
+    @Column(name = "image_artifact_id")
+    private UUID imageArtifactId;
+
     public Application(String name, String image, Integer containerPort) {
+        this(name, image, null, containerPort);
+    }
+
+    public Application(
+            String name,
+            String image,
+            UUID imageArtifactId,
+            Integer containerPort
+    ) {
         this.name = name;
         this.image = image;
+        this.imageArtifactId = imageArtifactId;
         this.containerPort = containerPort;
     }
 }

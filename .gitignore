@@ -10,6 +10,7 @@ graphify-out/
 .env
 .env.*
 !.env.example
+/data/
 
 ### STS ###
 .apt_generated

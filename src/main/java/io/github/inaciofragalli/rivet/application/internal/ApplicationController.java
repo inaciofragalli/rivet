@@ -20,7 +20,21 @@ public class ApplicationController {
 
     @PostMapping()
     public ResponseEntity<ApplicationResponse> createApplication(@Valid @RequestBody CreateApplicationRequest req) {
-        ApplicationResponse res  = applicationService.register(req.name(), req.image(), req.containerPort());
+        ApplicationResponse res;
+
+        if (req.imageArtifactId() != null) {
+            res = applicationService.registerFromArtifact(
+                    req.name(),
+                    req.imageArtifactId(),
+                    req.containerPort()
+            );
+        } else {
+            res = applicationService.register(
+                    req.name(),
+                    req.image(),
+                    req.containerPort()
+            );
+        }
 
         return ResponseEntity.created(URI.create("/api/applications/" + res.id())).body(res);
     }
