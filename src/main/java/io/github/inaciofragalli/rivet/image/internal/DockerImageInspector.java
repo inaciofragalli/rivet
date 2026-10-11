@@ -1,6 +1,7 @@
 package io.github.inaciofragalli.rivet.image.internal;
 
 import io.github.inaciofragalli.rivet.image.ImageMetadata;
+import io.github.inaciofragalli.rivet.image.DockerImageReference;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
@@ -133,18 +134,21 @@ public class DockerImageInspector {
                         }
                     }
 
-                    int lastColon = imageReference.lastIndexOf(':');
-                    int lastSlash = imageReference.lastIndexOf('/');
+                    DockerImageReference reference;
 
-                    String name = lastColon > lastSlash
-                            ? imageReference.substring(0, lastColon)
-                            : imageReference;
+                    try {
+                        reference = DockerImageReference.parse(imageReference);
+                    } catch (IllegalArgumentException e) {
+                        throw new IOException("Referência Docker inválida", e);
+                    }
 
-                    String tag = lastColon > lastSlash
-                            ? imageReference.substring(lastColon + 1)
-                            : null;
-
-                    return new ImageMetadata(name, tag, architecture, os, ports);
+                    return new ImageMetadata(
+                            reference.name(),
+                            reference.tag(),
+                            architecture,
+                            os,
+                            ports
+                    );
                 }
             }
 
