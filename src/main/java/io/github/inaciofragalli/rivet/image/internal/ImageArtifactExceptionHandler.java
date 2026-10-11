@@ -25,10 +25,12 @@ public class ImageArtifactExceptionHandler {
         return problem;
     }
 
-    @ExceptionHandler(MaxUploadSizeExceededException.class)
-    public ProblemDetail handleOversizedUpload(
-            MaxUploadSizeExceededException e
-    ) {
+
+    @ExceptionHandler({
+            MaxUploadSizeExceededException.class,
+            ImageArchiveTooLargeException.class
+    })
+    public ProblemDetail handleOversizedUpload(Exception e) {
         ProblemDetail problem = ProblemDetail.forStatus(
                 HttpStatus.CONTENT_TOO_LARGE
         );
@@ -38,6 +40,7 @@ public class ImageArtifactExceptionHandler {
 
         return problem;
     }
+
 
     @ExceptionHandler(ImageArtifactNotFoundException.class)
     public ProblemDetail handleArtifactNotFound(
