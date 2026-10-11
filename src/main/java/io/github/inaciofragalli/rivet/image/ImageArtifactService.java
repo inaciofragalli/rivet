@@ -1,4 +1,3 @@
-
 package io.github.inaciofragalli.rivet.image;
 
 import io.github.inaciofragalli.rivet.image.internal.*;
@@ -30,6 +29,8 @@ public class ImageArtifactService {
 
             try {
                 metadata = inspector.inspect(staged);
+            } catch (ImageArchiveTooLargeException e) {
+                throw e;
             } catch (IOException | RuntimeException e) {
                 throw new InvalidImageArchiveException(e);
             }
