@@ -424,4 +424,43 @@ class DockerImageInspectorTest {
     }
 
 
+    @Test
+    void shouldRejectGzipWithExcessiveDecompressedSize() throws IOException {
+        Path tarPath = tempDir.resolve("oversized.tar");
+        Path gzipPath = tempDir.resolve("oversized.tar.gz");
+
+        Map<String, String> entries = new LinkedHashMap<>();
+
+        entries.put("config.json", """
+            {
+              "architecture": "amd64",
+              "os": "linux",
+              "config": {}
+            }
+            """);
+
+        entries.put(
+                "manifest.json",
+                manifest("app:v1", "config.json")
+        );
+
+        // Camada grande depois dos metadados.
+        entries.put("layer.tar", "A".repeat(128 * 1024));
+
+        createTar(tarPath, entries);
+
+        try (GZIPOutputStream gzip =
+                     new GZIPOutputStream(Files.newOutputStream(gzipPath))) {
+            Files.copy(tarPath, gzip);
+        }
+
+        // Limite reduzido somente para o teste.
+        DockerImageInspector limitedInspector =
+                new DockerImageInspector(32 * 1024);
+
+        assertThrows(
+                ImageArchiveTooLargeException.class,
+                () -> limitedInspector.inspect(gzipPath)
+        );
+    }
 }
