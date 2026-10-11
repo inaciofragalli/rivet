@@ -1,6 +1,7 @@
 package io.github.inaciofragalli.rivet.application.internal;
 
 import jakarta.validation.constraints.*;
+import java.util.UUID;
 
 public record CreateApplicationRequest(
         @NotBlank
@@ -8,12 +9,18 @@ public record CreateApplicationRequest(
         @Pattern(regexp = "^[a-zA-Z0-9][a-zA-Z0-9_.-]*$")
         String name,
 
-        @NotBlank
         String image,
+
+        UUID imageArtifactId,
 
         @NotNull
         @Min(1)
         @Max(65535)
         Integer containerPort
 ) {
+        @AssertTrue(message = "Provide either image or imageArtifactId")
+        public boolean isImageSourceValid() {
+                return (image != null && !image.isBlank() && imageArtifactId == null)
+                        || (image == null && imageArtifactId != null);
+        }
 }
