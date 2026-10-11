@@ -20,6 +20,7 @@ import java.util.List;
 @Component
 public class DockerImageInspector {
     private final JsonMapper mapper = JsonMapper.builder().build();
+    private static final long MAX_METADATA_SIZE = 1024 * 1024;
 
     public ImageMetadata inspect(Path archivePath) throws IOException {
         String configPath = null;
@@ -182,7 +183,15 @@ public class DockerImageInspector {
     private byte[] readMetadata(TarArchiveInputStream tar, TarArchiveEntry entry) throws IOException {
         long size = entry.getSize();
 
+        if (size < 0 || size > MAX_METADATA_SIZE) {
+            throw new IOException("Tamanho de metadados inválido");
+        }
+
         byte[] content = tar.readNBytes((int) size);
+
+        if (content.length != size) {
+            throw new IOException("Arquivo TAR incompleto");
+        }
 
         return content;
     }
