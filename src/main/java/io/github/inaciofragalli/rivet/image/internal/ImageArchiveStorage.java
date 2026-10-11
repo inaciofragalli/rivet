@@ -43,7 +43,7 @@ public class ImageArchiveStorage {
                 totalBytes += bytesRead;
 
                 if (totalBytes > MAX_ARCHIVE_SIZE) {
-                    throw new IOException("Imagem excede o limite de 512 MiB");
+                    throw new ImageArchiveTooLargeException();
                 }
 
                 output.write(buffer, 0, bytesRead);
