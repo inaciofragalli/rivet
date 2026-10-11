@@ -2,6 +2,7 @@ package io.github.inaciofragalli.rivet.application.internal;
 
 import jakarta.validation.constraints.*;
 import java.util.UUID;
+import io.github.inaciofragalli.rivet.image.DockerImageReference;
 
 public record CreateApplicationRequest(
         @NotBlank
@@ -22,5 +23,12 @@ public record CreateApplicationRequest(
         public boolean isImageSourceValid() {
                 return (image != null && !image.isBlank() && imageArtifactId == null)
                         || (image == null && imageArtifactId != null);
+        }
+
+        @AssertTrue(message = "Invalid Docker image reference")
+        public boolean isImageReferenceValid() {
+                return image == null
+                        || image.isBlank()
+                        || DockerImageReference.isValid(image);
         }
 }
