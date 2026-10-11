@@ -352,4 +352,44 @@ class DockerImageInspectorTest {
         assertEquals(List.of(80), metadata.exposedPorts());
     }
 
+
+    @Test
+    void shouldAcceptMultipleImageTags() throws IOException {
+        Path archive = tempDir.resolve("multiple-tags.tar");
+
+        String config = """
+            {
+              "architecture": "amd64",
+              "os": "linux",
+              "config": {}
+            }
+            """;
+
+        String manifest = """
+            [
+              {
+                "Config": "config.json",
+                "RepoTags": [
+                  "minha-api:1.0",
+                  "minha-api:latest"
+                ],
+                "Layers": []
+              }
+            ]
+            """;
+
+        Map<String, String> entries = new LinkedHashMap<>();
+        entries.put("config.json", config);
+        entries.put("manifest.json", manifest);
+
+        createTar(archive, entries);
+
+        ImageMetadata result = inspector.inspect(archive);
+
+        assertEquals("minha-api", result.image());
+        assertEquals("1.0", result.tag());
+        assertEquals("amd64", result.architecture());
+    }
+
+
 }
