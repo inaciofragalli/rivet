@@ -21,8 +21,10 @@ public record CreateApplicationRequest(
 ) {
         @AssertTrue(message = "Provide either image or imageArtifactId")
         public boolean isImageSourceValid() {
-                return (image != null && !image.isBlank() && imageArtifactId == null)
-                        || (image == null && imageArtifactId != null);
+                boolean hasImage = image != null && !image.isBlank();
+                boolean hasArtifact = imageArtifactId != null;
+
+                return hasImage ^ hasArtifact;
         }
 
         @AssertTrue(message = "Invalid Docker image reference")
