@@ -1,87 +1,123 @@
 # Rivet
 
-O Rivet é uma plataforma para implantar e gerenciar aplicações em infraestrutura própria. A ideia é centralizar tarefas que hoje seriam feitas com Docker e SSH, como cadastrar aplicações e servidores, implantar versões e acompanhar o estado das implantações.
+O Rivet é um projeto de plataforma self-hosted para implantar e gerenciar aplicações em infraestrutura própria. A proposta é centralizar tarefas que, sem a ferramenta, seriam feitas com Docker e SSH: cadastrar aplicações, registrar servidores, implantar versões e acompanhar deployments.
 
-A primeira versão foi pensada para hospedagem pessoal em um servidor Linux modesto. Integrações com GitHub, builds automáticos, suporte a vários servidores e observabilidade mais avançada ficam para etapas posteriores.
+O MVP está sendo desenvolvido para um servidor Linux modesto, com foco em aprendizado e evolução incremental. Integrações com GitHub, builds automáticos, múltiplos servidores e observabilidade avançada ficam para etapas futuras.
 
-> **Estado atual:** já é possível cadastrar aplicações e consultá-las pela API. Cadastro de servidores, operações SSH, execução de containers, histórico de deployments e autenticação administrativa definitiva ainda não foram implementados.
+> **Estado atual:** o backend já cadastra e consulta aplicações, aceita upload de arquivos de imagem Docker (`docker save`) e vincula um artefato enviado a uma aplicação. **Ainda não implanta imagens nem inicia contêineres.** Cadastro de servidores, SSH, deployments, histórico de execução e autenticação administrativa definitiva continuam pendentes.
 
-## Repositórios
+## Repositórios e tecnologias
 
-O backend e o painel web ficam em repositórios separados:
+- **Backend:** [`rivet`](https://github.com/inaciofragalli/rivet) — Java 21, Spring Boot 4.1.1, Gradle Kotlin DSL, Spring MVC/Security/Validation, Spring Data JPA, PostgreSQL, Flyway e Spring Modulith.
+- **Frontend:** [`rivet-frontend`](https://github.com/inaciofragalli/rivet-frontend) — painel React + TypeScript, desenvolvido separadamente.
+- **Testes e qualidade:** JUnit, MockMvc, Testcontainers, GitHub Actions e Qodana.
+- **Documentação da API:** springdoc-openapi e Swagger UI.
 
-- [`rivet`](https://github.com/inaciofragalli/rivet): este repositório, com a API e a futura lógica de gerenciamento da infraestrutura.
-- [`rivet-frontend`](https://github.com/inaciofragalli/rivet-frontend): painel web em React e TypeScript.
+A organização do backend segue um monólito modular. Os módulos implementados até o momento são [`application`](docs/architecture/modules/application.md) e [`image`](docs/architecture/modules/image.md). As decisões arquiteturais estão registradas em [`docs/adr/`](docs/adr/).
 
-## Tecnologias
+## Funcionalidades disponíveis
 
-- Java 21, Spring Boot 4.1.1 e Gradle Kotlin DSL
-- Spring Web MVC, Spring Security e Bean Validation
-- Spring Data JPA, PostgreSQL e Flyway
-- Spring Modulith (monólito modular)
-- springdoc-openapi (OpenAPI e Swagger UI)
-- JUnit, MockMvc e Testcontainers para testes
-- GitHub Actions para CI e Qodana para análise estática
-
-O primeiro módulo de negócio, `application`, fica em `io.github.inaciofragalli.rivet.application`. Os módulos de servidores e deployments ainda serão desenvolvidos. Os detalhes do módulo estão em [application.md](docs/architecture/modules/application.md); o histórico da decisão sobre persistência de eventos está no [ADR 0001](docs/adr/0001-modulith-jpa.md).
-
-## O que já funciona
-
-| Método | Rota | Comportamento |
+| Método | Endpoint | Comportamento |
 | --- | --- | --- |
-| `POST` | `/api/applications` | Registra aplicação; retorna `201 Created` e `Location` |
-| `GET` | `/api/applications/{id}` | Busca por UUID; retorna `200 OK` ou `404 Not Found` |
-| `GET` | `/api/applications` | Lista aplicações; retorna `200 OK` (inclusive lista vazia) |
+| `POST` | `/api/image-artifacts` | Recebe TAR/TAR.GZ de `docker save`, armazena e retorna metadados; `201 Created` |
+| `POST` | `/api/applications` | Cadastra aplicação por referência Docker ou UUID de artefato; `201 Created` e `Location` |
+| `GET` | `/api/applications/{id}` | Consulta aplicação por UUID; `200 OK` ou `404 Not Found` |
+| `GET` | `/api/applications` | Lista aplicações, incluindo lista vazia (`[]`); `200 OK` |
 
-No cadastro são informados `name`, `image` e `containerPort`. O nome deve ser único, ter no máximo 30 caracteres e começar com letra ou número. Depois do primeiro caractere, aceita também `_`, `.` e `-`. A imagem é obrigatória, e a porta deve estar entre 1 e 65535. Dados inválidos retornam `400 Bad Request`; nomes já cadastrados retornam `409 Conflict`.
+**Upload de imagens:** o arquivo deve conter um manifesto válido de uma imagem Docker. O backend extrai nome, tag, sistema operacional, arquitetura e portas TCP declaradas; calcula SHA-256; e registra o artefato em PostgreSQL. O arquivo original é mantido em `RIVET_IMAGE_STORAGE_DIR`, sem ser carregado no daemon Docker.
 
-Por enquanto, a API guarda a configuração da aplicação. Ela ainda não inicia containers nem registra deployments. As respostas de erro seguem o formato *Problem Details*.
+**Cadastro de aplicações:** requer `name`, `containerPort` e **uma** fonte de imagem: `image` (referência Docker manual) **ou** `imageArtifactId` (UUID de upload já feito). A resposta passa a incluir `imageArtifactId`, que será `null` no cadastro manual. O nome é único e tem no máximo 30 caracteres; `containerPort` fica entre 1 e 65535.
+
+As respostas de erro tratadas usam [Problem Details](https://www.rfc-editor.org/rfc/rfc9457). Não existem, por enquanto, endpoints públicos para listar, baixar ou excluir artefatos de imagem.
+
+**Guia de ponta a ponta:** [Upload de imagens Docker e cadastro de aplicações](docs/guides/image-upload.md).
+
+## Exemplo rápido: imagem pronta → aplicação cadastrada
+
+O exemplo pressupõe uma instância de desenvolvimento local do Rivet em `http://localhost:8080`.
+
+```bash
+docker pull nginx:alpine
+docker save -o nginx.tar nginx:alpine
+curl -i -F 'file=@nginx.tar' http://localhost:8080/api/image-artifacts
+```
+
+O upload retorna `201 Created` e um `id` UUID. Use esse UUID na próxima requisição:
+
+```bash
+curl -i -X POST http://localhost:8080/api/applications \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "nginx-demo",
+    "imageArtifactId": "<uuid-retornado-pelo-upload>",
+    "containerPort": 80
+  }'
+```
+
+Substitua `<uuid-retornado-pelo-upload>` pelo UUID recebido (a string com os sinais `<` e `>` é apenas um marcador de exemplo).
+
+Também é possível cadastrar uma aplicação sem fazer upload:
+
+```json
+{
+  "name": "taskhub",
+  "image": "ghcr.io/exemplo/taskhub:v1",
+  "containerPort": 8080
+}
+```
+
+**Nenhum desses cadastros executa contêineres.** O próximo fluxo de produto será a integração do frontend com a API existente; a execução remota será implementada depois.
 
 ## Objetivo do MVP
 
-O MVP deve permitir que um administrador implante uma aplicação HTTP em um servidor Linux próprio, usando uma imagem Docker já construída. O Rivet ficará responsável pelas operações que, sem a ferramenta, precisariam ser feitas manualmente.
+O MVP deverá permitir que um administrador implante uma aplicação HTTP em seu próprio servidor Linux, usando uma imagem Docker já construída.
 
-O fluxo planejado é:
+Fluxo planejado (as etapas de deployment abaixo **ainda não foram implementadas**):
 
-1. Preparar uma imagem Docker fora do servidor de destino.
-2. Cadastrar a aplicação e o servidor no Rivet.
-3. Solicitar uma implantação pela API ou pelo painel.
-4. Transferir ou disponibilizar a imagem e iniciar o container por SSH, com autenticação por chave e verificação da *host key*.
-5. Verificar o resultado, registrar estado e erros e permitir consultar o histórico.
-6. Expor a aplicação por HTTPS quando desejado; inicialmente, a configuração de domínio/túnel poderá ser manual.
+1. Construir ou obter uma imagem Docker fora do servidor de destino.
+2. Cadastrar a aplicação e registrar um servidor no Rivet.
+3. Solicitar a implantação pelo painel ou pela API.
+4. Transferir/disponibilizar a imagem e iniciar o contêiner por SSH, com autenticação por chave e verificação da identidade do servidor (*host key*).
+5. Verificar o resultado, registrar estado/erros e permitir consultar o histórico.
+6. Publicar o serviço por HTTPS quando necessário; configuração de domínio/túnel poderá ser manual inicialmente.
 
-O painel administrativo deverá continuar privado, inclusive quando as aplicações implantadas estiverem acessíveis pela internet.
+O painel administrativo deverá permanecer privado, mesmo quando as aplicações implantadas estiverem acessíveis publicamente.
 
-Ficam fora do MVP os builds automáticos a partir de repositórios GitHub, Kubernetes, múltiplos nós, equipes, cobrança e orquestração distribuída.
+Ficam fora do MVP: builds automáticos a partir de repositórios GitHub, Kubernetes, múltiplos nós, equipes, cobrança e orquestração distribuída.
 
-## Segurança
+## Segurança e limitações atuais
 
-Existe uma configuração temporária para o perfil `dev` que permite todas as requisições e desabilita CSRF. Ela serve para desenvolvimento local. **Não use esse perfil em produção nem em ambientes expostos.**
+- O perfil **`dev`** libera todas as requisições e desabilita CSRF; existe exclusivamente para desenvolvimento local. **Não exponha a API com esse perfil à internet ou a uma rede não confiável.**
+- O CORS do perfil `dev` é aplicado a `/api/**`, com origem configurável por `RIVET_CORS_ALLOWED_ORIGIN` (padrão: `http://localhost:5173`). CORS não equivale a autenticação.
+- O upload limita o arquivo recebido a **512 MiB**; a inspeção limita o conteúdo descompactado a **2 GiB** e cada arquivo de metadados a **1 MiB**. Esses limites não tornam uploads arbitrários seguros para exposição pública.
+- A autenticação administrativa, a autorização de upload, a guarda de chaves SSH e a validação da identidade do servidor remoto ainda dependem de implementação.
+- O backend não inspeciona vulnerabilidades das camadas da imagem, não executa `docker load` nem publica portas no host.
+- O diretório de armazenamento de imagens precisa ser protegido pelo sistema operacional e contar com espaço suficiente. Não há exclusão pública, retenção automática de arquivos definitivos ou limpeza completa de órfãos.
 
-A autenticação administrativa e a forma de guardar credenciais SSH ainda precisam ser definidas e implementadas. O planejamento prevê que chaves privadas, tokens e senhas não sejam versionados nem apareçam em logs. As conexões SSH também deverão verificar a identidade do servidor remoto.
+Consulte [a documentação do módulo `image`](docs/architecture/modules/image.md) para os limites e decisões detalhados.
 
 ## Desenvolvimento local
 
 ### Pré-requisitos
 
-- JDK 21
-- PostgreSQL local para **executar a aplicação**
-- Docker instalado e daemon acessível para **executar os testes de integração com Testcontainers**
-- Git
+- JDK 21.
+- PostgreSQL local para **executar o backend**.
+- Docker instalado e daemon acessível para **executar os testes de integração via Testcontainers** e para gerar imagens com `docker save` nos exemplos.
+- Git.
 
-O repositório já inclui o Gradle Wrapper, então não é necessário instalar o Gradle separadamente.
+O projeto inclui o Gradle Wrapper; não é necessário instalar Gradle globalmente.
 
-### Banco de dados e configuração
+### Configurar banco e armazenamento
 
-Crie um banco PostgreSQL e um usuário com acesso a ele. O Flyway controla as migrações do esquema; o Hibernate fica com `spring.jpa.hibernate.ddl-auto=validate` e não cria as tabelas automaticamente.
+Crie o banco PostgreSQL e um usuário com acesso a ele. O Flyway gerencia o esquema e o Hibernate valida o mapeamento com `spring.jpa.hibernate.ddl-auto=validate`.
 
-Na raiz do projeto:
+Na raiz do repositório:
 
 ```bash
 cp .env.example .env
 ```
 
-Exemplo de configuração local:
+O arquivo `.env.example` define os campos que precisam ser configurados. Exemplo de `.env` **local**, com senha ilustrativa:
 
 ```dotenv
 DB_HOST=localhost
@@ -89,61 +125,75 @@ DB_PORT=5432
 DB_NAME=rivet
 DB_USERNAME=rivet
 DB_PASSWORD=defina_sua_senha_local
+RIVET_IMAGE_STORAGE_DIR=./data/images
 ```
 
-As variáveis de conexão são obrigatórias e não têm valores padrão. O arquivo `.env` é ignorado pelo Git e não deve ser versionado com credenciais. O `application.properties` já faz a importação opcional a partir da raiz do projeto:
+`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` e `RIVET_IMAGE_STORAGE_DIR` não possuem padrão na configuração Spring e precisam estar disponíveis. O arquivo `.env` é ignorado pelo Git; não coloque credenciais reais na documentação ou nos commits.
+
+A importação opcional do arquivo ocorre pela propriedade:
 
 ```properties
 spring.config.import=optional:file:./.env[.properties]
 ```
 
+Como o caminho é relativo, execute o backend a partir da raiz do repositório ou forneça as variáveis por outro mecanismo de configuração.
+
 ### Executar
 
-Para desenvolvimento local, usando a configuração de segurança exclusiva do perfil `dev`:
+Para desenvolvimento local:
 
 ```bash
 SPRING_PROFILES_ACTIVE=dev ./gradlew bootRun
 ```
 
-Por padrão, a API fica em `http://localhost:8080`. O springdoc disponibiliza OpenAPI e Swagger UI nos caminhos padrão, que devem ser conferidos ao executar a aplicação caso haja mudanças na configuração.
+Por padrão, o backend responde em `http://localhost:8080`. Sem `dev`, vale a configuração padrão restante do Spring Security; a autenticação administrativa própria do Rivet ainda não foi construída.
 
-Sem o perfil `dev`, vale a configuração restante do Spring Security. A autenticação administrativa própria do Rivet ainda está pendente.
+### Swagger/OpenAPI
 
-### Documentação da API
+Com o backend em execução:
 
-Com o backend em execução, a documentação da API fica disponível em:
+- [Swagger UI](http://localhost:8080/swagger-ui/index.html)
+- [OpenAPI JSON](http://localhost:8080/v3/api-docs)
 
-- [Swagger UI](http://localhost:8080/swagger-ui/index.html): interface para consultar e testar os endpoints.
-- [OpenAPI JSON](http://localhost:8080/v3/api-docs): especificação OpenAPI gerada pelo Springdoc.
+O springdoc gera a documentação a partir dos controllers e modelos atuais dos módulos `application` e `image`.
 
-O Springdoc gera a documentação a partir dos controllers e modelos da aplicação. Atualmente, o módulo `application` disponibiliza endpoints para cadastrar, consultar e listar aplicações.
+### Testes
 
-### Testar
-
-Com Docker em execução:
+Com o daemon Docker acessível:
 
 ```bash
 ./gradlew test --no-daemon
 ./gradlew build
 ```
 
-Os testes de integração usam PostgreSQL 17 via Testcontainers e `@ServiceConnection`, com um banco separado do ambiente de desenvolvimento. No CI, não é preciso configurar um serviço PostgreSQL à parte nem fornecer segredos `DB_*`. A análise do Qodana roda em outro workflow.
+Os testes de integração usam PostgreSQL 17 via Testcontainers e `@ServiceConnection`, com um banco separado do ambiente de desenvolvimento. No CI não é preciso disponibilizar um serviço PostgreSQL separado nem segredos `DB_*`. A análise do Qodana roda em outro workflow.
+
+## Documentação
+
+| Documento | Conteúdo |
+| --- | --- |
+| [Módulo `application`](docs/architecture/modules/application.md) | Cadastro, validação, persistência, endpoints e integração com imagens |
+| [Módulo `image`](docs/architecture/modules/image.md) | Inspeção TAR/GZIP, armazenamento, limites, persistência e segurança |
+| [Guia de upload](docs/guides/image-upload.md) | Fluxo prático `docker save` → upload → cadastro |
+| [ADR 0001](docs/adr/0001-modulith-jpa.md) | Decisão de adiar persistência de eventos do Spring Modulith via JPA |
 
 ## Estrutura do repositório
 
 ```text
 rivet/
-├── .github/workflows/             # CI e Qodana
+├── .github/workflows/                  # CI e Qodana
 ├── docs/
-│   ├── architecture/modules/      # Documentação de módulos implementados
-│   └── adr/                       # Registros de decisões arquiteturais
+│   ├── adr/                            # Decisões arquiteturais
+│   ├── architecture/modules/           # Documentação dos módulos implementados
+│   └── guides/                         # Guias de uso
 ├── src/
 │   ├── main/
 │   │   ├── java/io/github/inaciofragalli/rivet/
-│   │   │   ├── application/       # Módulo application e pacote internal/
-│   │   │   └── security/          # Configuração de segurança de desenvolvimento
-│   │   └── resources/db/migration/ # Migrações Flyway
-│   └── test/                     # Testes unitários, integração e modularidade
+│   │   │   ├── application/            # Cadastro/consulta de aplicações
+│   │   │   ├── image/                  # Upload e registro de artefatos Docker
+│   │   │   └── security/               # Configuração de segurança de desenvolvimento
+│   │   └── resources/db/migration/      # Migrações Flyway
+│   └── test/                           # Testes unitários, integração e modularidade
 ├── .env.example
 ├── build.gradle.kts
 └── settings.gradle.kts
@@ -151,9 +201,9 @@ rivet/
 
 ## Próximas etapas
 
-1. Implementar cadastro e gerenciamento de servidores, preparando a integração SSH.
-2. Implementar deployments de imagens prontas com verificação do estado real do container.
-3. Integrar as operações com o painel React/TypeScript.
+1. Integrar upload, visualização de metadados e cadastro de aplicações no painel React/TypeScript.
+2. Implementar cadastro e gerenciamento de servidores, preparando a integração SSH.
+3. Implementar deployments de imagens prontas com verificação do estado real do contêiner.
 4. Validar um deployment real no servidor doméstico, com administração privada e publicação HTTPS.
 
-Depois do MVP, estão previstas como possibilidades a integração com GitHub, builds automatizados, atualização/rollback, stacks Docker Compose e suporte a mais servidores.
+Após o MVP poderão ser avaliados integração com GitHub, builds automatizados, atualização/rollback, stacks Docker Compose e suporte a mais servidores.
