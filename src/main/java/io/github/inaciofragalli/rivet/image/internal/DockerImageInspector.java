@@ -13,6 +13,7 @@ import tools.jackson.databind.json.JsonMapper;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -22,6 +23,16 @@ import java.util.List;
 public class DockerImageInspector {
     private final JsonMapper mapper = JsonMapper.builder().build();
     private static final long MAX_METADATA_SIZE = 1024 * 1024;
+    private static final long DEFAULT_MAX_DECOMPRESSED_BYTES = 2L * 1024 * 1024 * 1024;
+    private final long maxDecompressedBytes;
+
+    public DockerImageInspector() {
+        this(DEFAULT_MAX_DECOMPRESSED_BYTES);
+    }
+
+    DockerImageInspector(long maxDecompressedBytes) {
+        this.maxDecompressedBytes = maxDecompressedBytes;
+    }
 
     public ImageMetadata inspect(Path archivePath) throws IOException {
         String configPath = null;
@@ -61,10 +72,10 @@ public class DockerImageInspector {
 
                         imageReference = repoTags.get(0).asString();
                         configPath = configNode.asString();
-
-                        break;
                     }
                 }
+
+                tar.transferTo(OutputStream.nullOutputStream());
             }
         }
 
@@ -177,7 +188,13 @@ public class DockerImageInspector {
                         .get();
             }
 
-            return new TarArchiveInputStream(stream);
+            return new TarArchiveInputStream(
+                    new DecompressedSizeLimitInputStream(
+                            stream,
+                            maxDecompressedBytes
+                    )
+            );
+
         } catch (IOException | RuntimeException e) {
             input.close();
             throw e;
