@@ -1,21 +1,25 @@
-
 package io.github.inaciofragalli.rivet.image.internal;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
+import java.nio.file.*;
+import java.time.Instant;
+import java.time.Duration;
 import java.util.UUID;
 
 @Component
 public class ImageArchiveStorage {
     private static final long MAX_ARCHIVE_SIZE = 512L * 1024 * 1024;
     private final Path storageDirectory;
+    private static final Logger log = LoggerFactory.getLogger(ImageArchiveStorage.class);
 
     public ImageArchiveStorage(
             @Value("${rivet.images.storage-dir}") String storageDir
@@ -93,5 +97,39 @@ public class ImageArchiveStorage {
         }
 
         Files.deleteIfExists(normalized);
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void cleanUpStaleFiles() {
+        if (!Files.isDirectory(storageDirectory)) {
+            return;
+        }
+
+        Instant cutoff = Instant.now().minus(Duration.ofHours(2));
+
+        try (DirectoryStream<Path> files =
+                     Files.newDirectoryStream(
+                             storageDirectory, "image-*.tmp"
+                     )) {
+
+            for (Path file : files) {
+                try {
+                    if (Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
+                            && Files.getLastModifiedTime(
+                            file, LinkOption.NOFOLLOW_LINKS
+                    ).toInstant().isBefore(cutoff)) {
+
+                        Files.deleteIfExists(file);
+                        log.info("Arquivo temporário removido: {}",
+                                file.getFileName());
+                    }
+                } catch (IOException e) {
+                    log.warn("Falha ao limpar arquivo: {}", file, e);
+                }
+            }
+
+        } catch (IOException | DirectoryIteratorException e) {
+            log.warn("Falha ao verificar arquivos temporários", e);
+        }
     }
 }
