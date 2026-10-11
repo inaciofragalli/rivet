@@ -49,7 +49,7 @@ public class DockerImageInspector {
                         JsonNode configNode = image.path("Config");
 
                         if (!repoTags.isArray()
-                                || repoTags.size() != 1
+                                || repoTags.isEmpty()
                                 || !repoTags.get(0).isString()
                                 || repoTags.get(0).asString().isBlank()) {
                             throw new IOException("RepoTags inválido ou ausente");
