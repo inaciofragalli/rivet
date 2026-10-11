@@ -3,12 +3,15 @@ package io.github.inaciofragalli.rivet.image.internal;
 import io.github.inaciofragalli.rivet.image.ImageMetadata;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorInputStream;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -149,7 +152,31 @@ public class DockerImageInspector {
     }
 
     private TarArchiveInputStream openArchive(Path path) throws IOException {
-        return new TarArchiveInputStream(Files.newInputStream(path));
+        BufferedInputStream input = new BufferedInputStream(
+                Files.newInputStream(path)
+        );
+
+        try {
+            input.mark(2);
+
+            int first = input.read();
+            int second = input.read();
+
+            input.reset();
+
+            InputStream stream = input;
+
+            if (first == 0x1f && second == 0x8b) {
+                stream = GzipCompressorInputStream.builder()
+                        .setInputStream(input)
+                        .get();
+            }
+
+            return new TarArchiveInputStream(stream);
+        } catch (IOException | RuntimeException e) {
+            input.close();
+            throw e;
+        }
     }
 
     private byte[] readMetadata(TarArchiveInputStream tar, TarArchiveEntry entry) throws IOException {
