@@ -104,8 +104,8 @@ public class DockerImageInspector {
 
                     List<Integer> ports = new ArrayList<>();
 
-                    if (exposedPorts.isObject()) {
-                        if (!exposedPorts.isMissingNode() && !exposedPorts.isObject()) {
+                    if (!exposedPorts.isMissingNode() && !exposedPorts.isNull()) {
+                        if (!exposedPorts.isObject()) {
                             throw new IOException("ExposedPorts deve ser um objeto JSON");
                         }
 
