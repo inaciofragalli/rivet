@@ -192,4 +192,33 @@ class ApplicationImageArtifactIntegrationTest {
 
         return id;
     }
+
+
+    @Test
+    void shouldAcceptBlankImageWithArtifactId() throws Exception {
+        UUID artifactId = createArtifact();
+
+        String body = """
+            {
+              "name": "blank-image-test",
+              "image": "",
+              "imageArtifactId": "%s",
+              "containerPort": 80
+            }
+            """.formatted(artifactId);
+
+        mockMvc.perform(post("/api/applications")
+                        .with(csrf())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpectAll(
+                        status().isCreated(),
+                        jsonPath("$.image").value("nginx:alpine"),
+                        jsonPath("$.imageArtifactId")
+                                .value(artifactId.toString())
+                );
+
+        assertEquals(1, applicationRepository.count());
+    }
+
 }
