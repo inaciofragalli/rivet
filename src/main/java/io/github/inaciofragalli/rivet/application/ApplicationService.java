@@ -44,7 +44,8 @@ public class ApplicationService {
                 application.getId(),
                 application.getName(),
                 application.getImage(),
-                application.getContainerPort()
+                application.getContainerPort(),
+                application.getImageArtifactId()
         );
     }
 }
