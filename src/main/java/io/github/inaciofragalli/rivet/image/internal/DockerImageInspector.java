@@ -1,0 +1,170 @@
+package io.github.inaciofragalli.rivet.image.internal;
+
+import io.github.inaciofragalli.rivet.image.ImageMetadata;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
+import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+
+@Component
+public class DockerImageInspector {
+    private final JsonMapper mapper = JsonMapper.builder().build();
+
+    public ImageMetadata inspect(Path archivePath) throws IOException {
+        String configPath = null;
+        String imageReference = null;
+
+        // PRIMEIRA PASSAGEM: encontrar o manifest.json
+        try (TarArchiveInputStream tar = openArchive(archivePath)) {
+            TarArchiveEntry entry;
+
+            while ((entry = tar.getNextEntry()) != null) {
+                if (entry.isFile()) {
+
+                    if (entry.getName().equals("manifest.json")) {
+                        byte[] content = readMetadata(tar, entry);
+
+                        JsonNode manifest = parseJson(content, "manifest.json");
+
+                        if (manifest == null || !manifest.isArray() || manifest.size() != 1) {
+                            throw new IOException("O TAR deve conter exatamente uma imagem");
+                        }
+
+                        JsonNode image = manifest.get(0);
+
+                        JsonNode repoTags = image.path("RepoTags");
+                        JsonNode configNode = image.path("Config");
+
+                        if (!repoTags.isArray()
+                                || repoTags.size() != 1
+                                || !repoTags.get(0).isString()
+                                || repoTags.get(0).asString().isBlank()) {
+                            throw new IOException("RepoTags inválido ou ausente");
+                        }
+
+                        if (!configNode.isString() || configNode.asString().isBlank()) {
+                            throw new IOException("Config inválido ou ausente");
+                        }
+
+                        imageReference = repoTags.get(0).asString();
+                        configPath = configNode.asString();
+
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ENTRE AS DUAS PASSAGENS
+        if (configPath == null) {
+            throw new IOException("manifest.json não encontrado");
+        }
+
+        // SEGUNDA PASSAGEM: encontrar o JSON de configuração
+        try (TarArchiveInputStream tar = openArchive(archivePath)) {
+            TarArchiveEntry entry;
+
+            while ((entry = tar.getNextEntry()) != null) {
+                if (entry.isFile() && entry.getName().equals(configPath)) {
+                    byte[] content = readMetadata(tar, entry);
+
+                    JsonNode config = parseJson(content, configPath);
+
+                    if (config == null || !config.isObject()) {
+                        throw new IOException("Configuração da imagem inválida");
+                    }
+
+                    JsonNode architectureNode = config.path("architecture");
+                    JsonNode osNode = config.path("os");
+
+                    if (!architectureNode.isString()
+                            || architectureNode.asString().isBlank()
+                            || !osNode.isString()
+                            || osNode.asString().isBlank()) {
+                        throw new IOException("Arquitetura ou sistema operacional inválido");
+                    }
+
+                    String architecture = architectureNode.asString();
+                    String os = osNode.asString();
+
+                    JsonNode exposedPorts = config.path("config").path("ExposedPorts");
+
+                    List<Integer> ports = new ArrayList<>();
+
+                    if (exposedPorts.isObject()) {
+                        if (!exposedPorts.isMissingNode() && !exposedPorts.isObject()) {
+                            throw new IOException("ExposedPorts deve ser um objeto JSON");
+                        }
+
+                        for (String portSpec : exposedPorts.propertyNames()) {
+                            String[] parts = portSpec.split("/", -1);
+
+                            if (parts.length != 2) {
+                                throw new IOException("Porta inválida: " + portSpec);
+                            }
+
+                            if (!parts[1].equals("tcp")) {
+                                continue;
+                            }
+
+                            try {
+                                int port = Integer.parseInt(parts[0]);
+
+                                if (port < 1 || port > 65535) {
+                                    throw new IOException("Porta fora do intervalo: " + port);
+                                }
+
+                                ports.add(port);
+                            } catch (NumberFormatException e) {
+                                throw new IOException("Porta inválida: " + portSpec, e);
+                            }
+                        }
+                    }
+
+                    int lastColon = imageReference.lastIndexOf(':');
+                    int lastSlash = imageReference.lastIndexOf('/');
+
+                    String name = lastColon > lastSlash
+                            ? imageReference.substring(0, lastColon)
+                            : imageReference;
+
+                    String tag = lastColon > lastSlash
+                            ? imageReference.substring(lastColon + 1)
+                            : null;
+
+                    return new ImageMetadata(name, tag, architecture, os, ports);
+                }
+            }
+
+            throw new IOException("Arquivo de configuração da imagem não encontrado");
+        }
+    }
+
+    private TarArchiveInputStream openArchive(Path path) throws IOException {
+        return new TarArchiveInputStream(Files.newInputStream(path));
+    }
+
+    private byte[] readMetadata(TarArchiveInputStream tar, TarArchiveEntry entry) throws IOException {
+        long size = entry.getSize();
+
+        byte[] content = tar.readNBytes((int) size);
+
+        return content;
+    }
+
+    private JsonNode parseJson(byte[] content, String filename) throws IOException {
+        try {
+            return mapper.readTree(content);
+        } catch (JacksonException e) {
+            throw new IOException("JSON inválido: " + filename, e);
+        }
+    }
+}
