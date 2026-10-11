@@ -392,4 +392,36 @@ class DockerImageInspectorTest {
     }
 
 
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "[]",
+            "\"80/tcp\"",
+            "80",
+            "true"
+    })
+    void shouldRejectInvalidExposedPortsType(String exposedPorts)
+            throws IOException {
+
+        Path archive = tempDir.resolve("invalid-exposed-ports.tar");
+
+        String config = """
+            {
+              "architecture": "amd64",
+              "os": "linux",
+              "config": {
+                "ExposedPorts": %s
+              }
+            }
+            """.formatted(exposedPorts);
+
+        Map<String, String> entries = new LinkedHashMap<>();
+        entries.put("config.json", config);
+        entries.put("manifest.json", manifest("app:v1", "config.json"));
+
+        createTar(archive, entries);
+
+        assertThrows(IOException.class, () -> inspector.inspect(archive));
+    }
+
+
 }
