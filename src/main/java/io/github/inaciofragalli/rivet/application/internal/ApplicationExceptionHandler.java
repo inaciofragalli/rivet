@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.Objects;
 
-@RestControllerAdvice
+@RestControllerAdvice(basePackageClasses = ApplicationController.class)
 public class ApplicationExceptionHandler {
     @ExceptionHandler(ApplicationAlreadyExistsException.class)
     public ProblemDetail handleApplicationAlreadyExistsException(ApplicationAlreadyExistsException e) {
