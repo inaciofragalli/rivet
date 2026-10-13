@@ -1,4 +1,29 @@
+
+<div align="center">
+
 # Rivet
+
+### Plataforma self-hosted para gerenciar aplicações em infraestrutura própria
+
+![Java](https://img.shields.io/badge/Java_21-ED8B00?style=for-the-badge&logo=openjdk&logoColor=white)
+![Spring Boot](https://img.shields.io/badge/Spring_Boot-6DB33F?style=for-the-badge&logo=springboot&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white)
+![Gradle](https://img.shields.io/badge/Gradle-02303A?style=for-the-badge&logo=gradle&logoColor=white)
+
+![Repo size](https://img.shields.io/github/repo-size/inaciofragalli/rivet?style=flat-square)
+![Last commit](https://img.shields.io/github/last-commit/inaciofragalli/rivet?style=flat-square)
+![Issues](https://img.shields.io/github/issues/inaciofragalli/rivet?style=flat-square)
+
+[Funcionalidades](#funcionalidades-disponíveis) •
+[MVP](#objetivo-do-mvp) •
+[Segurança](#segurança-e-limitações-atuais) •
+[Desenvolvimento](#desenvolvimento-local) •
+[Documentação](#documentação) •
+[Roadmap](#próximas-etapas)
+
+</div>
+
+---
 
 O Rivet é um projeto de plataforma self-hosted para implantar e gerenciar aplicações em infraestrutura própria. A proposta é centralizar tarefas que, sem a ferramenta, seriam feitas com Docker e SSH: cadastrar aplicações, registrar servidores, implantar versões e acompanhar deployments.
 
@@ -194,8 +219,9 @@ rivet/
 │   │   ├── java/io/github/inaciofragalli/rivet/
 │   │   │   ├── application/            # Cadastro/consulta de aplicações
 │   │   │   ├── image/                  # Upload e registro de artefatos Docker
+│   │   │   ├── server/                 # Cadastro/consulta de servidores
 │   │   │   └── security/               # Configuração de segurança de desenvolvimento
-│   │   └── resources/db/migration/      # Migrações Flyway
+│   │   └── resources/db/migration/     # Migrações Flyway
 │   └── test/                           # Testes unitários, integração e modularidade
 ├── .env.example
 ├── build.gradle.kts
