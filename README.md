@@ -117,6 +117,7 @@ Na raiz do repositório:
 cp .env.example .env
 ```
 
+
 O arquivo `.env.example` define os campos que precisam ser configurados. Exemplo de `.env` **local**, com senha ilustrativa:
 
 ```dotenv
@@ -125,10 +126,12 @@ DB_PORT=5432
 DB_NAME=rivet
 DB_USERNAME=rivet
 DB_PASSWORD=defina_sua_senha_local
+
 RIVET_IMAGE_STORAGE_DIR=./data/images
+RIVET_CORS_ALLOWED_ORIGIN=http://localhost:5173
 ```
 
-`DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USERNAME`, `DB_PASSWORD` e `RIVET_IMAGE_STORAGE_DIR` não possuem padrão na configuração Spring e precisam estar disponíveis. O arquivo `.env` é ignorado pelo Git; não coloque credenciais reais na documentação ou nos commits.
+As variáveis de conexão com o PostgreSQL e `RIVET_IMAGE_STORAGE_DIR` são obrigatórias. `RIVET_CORS_ALLOWED_ORIGIN` é opcional e utiliza `http://localhost:5173` como padrão, permitindo configurar a origem do frontend durante o desenvolvimento.
 
 A importação opcional do arquivo ocorre pela propriedade:
 
