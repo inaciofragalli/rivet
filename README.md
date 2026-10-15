@@ -161,8 +161,11 @@ RIVET_CORS_ALLOWED_ORIGIN=http://localhost:5173
 # Somente enquanto provisionar o administrador inicial
 RIVET_BOOTSTRAP_EMAIL=admin@example.com
 RIVET_BOOTSTRAP_PASSWORD=troque-por-uma-senha-forte
+
+RIVET_SESSION_COOKIE_SECURE=false
 ```
 
+`RIVET_SESSION_COOKIE_SECURE=false` permite testar sessões por HTTP localmente. Em produção, utilize true e HTTPS. O valor padrão configurado no backend é true.
 O projeto importa opcionalmente `.env` como arquivo de propriedades por `spring.config.import=optional:file:./.env[.properties]`. Para garantir a disponibilização das variáveis `RIVET_BOOTSTRAP_*` ao `@Value` do bootstrap no desenvolvimento local, exporte-as para o processo, ou configure-as na IDE/ambiente de execução:
 
 ```bash
