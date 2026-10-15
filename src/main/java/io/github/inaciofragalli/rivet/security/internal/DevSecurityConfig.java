@@ -1,5 +1,5 @@
 
-package io.github.inaciofragalli.rivet.security;
+package io.github.inaciofragalli.rivet.security.internal;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;

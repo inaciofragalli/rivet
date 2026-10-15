@@ -22,7 +22,7 @@ public class Server {
     @Column(nullable = false)
     private String host;
 
-    @Column(name = "ssh_port", nullable = false, length = 65535)
+    @Column(name = "ssh_port", nullable = false)
     private Integer sshPort;
 
     @Column(name = "ssh_username", nullable = false, length = 30)

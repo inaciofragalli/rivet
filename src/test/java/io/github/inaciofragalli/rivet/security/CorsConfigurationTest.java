@@ -5,6 +5,7 @@ import io.github.inaciofragalli.rivet.application.ApplicationService;
 import io.github.inaciofragalli.rivet.application.internal.ApplicationController;
 import io.github.inaciofragalli.rivet.image.ImageArtifactService;
 import io.github.inaciofragalli.rivet.image.internal.ImageArtifactController;
+import io.github.inaciofragalli.rivet.security.internal.DevSecurityConfig;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
