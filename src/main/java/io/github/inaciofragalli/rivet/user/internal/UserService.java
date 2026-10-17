@@ -40,6 +40,10 @@ public class UserService implements UserLookup, UserProvisioning {
     }
 
     private static String normalizeEmail(String email) {
+        if (email == null || email.isBlank()) {
+            throw new IllegalArgumentException("Email cannot be null or blank");
+        }
+
         return email.strip().toLowerCase(Locale.ROOT);
     }
 }

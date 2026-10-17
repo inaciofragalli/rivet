@@ -2,6 +2,7 @@ package io.github.inaciofragalli.rivet.user.internal;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -20,6 +21,7 @@ public class User {
 
     @Column(nullable = false, length = 254)
     @Email
+    @NotBlank
     private String email;
 
     @Column(name = "password_hash", nullable = false, length = 255)
