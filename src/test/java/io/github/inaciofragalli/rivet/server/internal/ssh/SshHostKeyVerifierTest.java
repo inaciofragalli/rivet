@@ -4,6 +4,7 @@ import org.apache.sshd.client.keyverifier.KnownHostsServerKeyVerifier;
 import org.apache.sshd.client.keyverifier.RejectAllServerKeyVerifier;
 import org.apache.sshd.client.session.ClientSession;
 import org.apache.sshd.common.config.keys.PublicKeyEntry;
+import org.apache.sshd.common.util.security.SecurityUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -85,5 +86,39 @@ class SshHostKeyVerifierTest {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");
         generator.initialize(2048);
         return generator.generateKeyPair();
+    }
+
+    @Test
+    void shouldAcceptEd25519HostKeyRegisteredInKnownHosts() throws Exception {
+        KeyPair expected = generateEd25519KeyPair();
+        Path knownHosts = tempDir.resolve("known_hosts");
+        Files.writeString(
+                knownHosts,
+                HOST + " " + PublicKeyEntry.toString(expected.getPublic()) + "\n"
+        );
+
+        KnownHostsServerKeyVerifier verifier = verifier(knownHosts);
+
+        assertTrue(checkKey(verifier, expected));
+    }
+
+    @Test
+    void shouldRejectModifiedEd25519HostKey() throws Exception {
+        KeyPair expected = generateEd25519KeyPair();
+        KeyPair different = generateEd25519KeyPair();
+        Path knownHosts = tempDir.resolve("known_hosts");
+        Files.writeString(
+                knownHosts,
+                HOST + " " + PublicKeyEntry.toString(expected.getPublic()) + "\n"
+        );
+
+        KnownHostsServerKeyVerifier verifier = verifier(knownHosts);
+
+        assertFalse(checkKey(verifier, different));
+    }
+
+    private KeyPair generateEd25519KeyPair() throws Exception {
+        SecurityUtils.isBouncyCastleRegistered();
+        return SecurityUtils.getKeyPairGenerator("Ed25519").generateKeyPair();
     }
 }
