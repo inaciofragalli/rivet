@@ -58,5 +58,22 @@ class UserProvisioningIntegrationTest {
         assertEquals(before, userRepository.count());
         assertTrue(userLookup.findByEmail("second@test.local").isEmpty());
     }
+
+    @Test
+    void shouldNormalizeEmailWhenCreatingInitialAdminAndLookingUp() {
+        userRepository.deleteAll();
+        userRepository.flush();
+
+        userProvisioning.createInitialAdmin("  Admin@Test.Local  ", "stored-hash");
+
+        User persistedUser = userRepository.findAll().getFirst();
+        assertEquals("admin@test.local", persistedUser.getEmail());
+
+        UserAuthData byUppercaseWithWhitespace = userLookup.findByEmail("  ADMIN@TEST.LOCAL  ").orElseThrow();
+        assertEquals("admin@test.local", byUppercaseWithWhitespace.email());
+
+        UserAuthData byNormalized = userLookup.findByEmail("admin@test.local").orElseThrow();
+        assertEquals("admin@test.local", byNormalized.email());
+    }
 }
 
