@@ -1,37 +1,27 @@
 # Guia: autenticação administrativa do Rivet
 
-**Status:** implementado e validado manualmente na branch de trabalho `feat/auth`; aguardando revisão da PR.  
+**Status:** implementado, testado e integrado à `main`.   
 **Referência:** [Módulo `security`](../architecture/modules/security.md).  
 **Escopo:** uso local do fluxo login → sessão → logout; não é um guia de exposição pública.
 
-Este guia explica como provisionar o administrador inicial e testar a autenticação do Rivet pela API. Ao contrário do Quizler, a autenticação utiliza **sessões HTTP gerenciadas pelo Spring Security**, não JWT. O acesso administrativo permanecerá privado, inicialmente via Tailscale ou rede autenticada equivalente.
+Este guia explica como provisionar o administrador inicial e testar a autenticação do Rivet pela API. A autenticação utiliza **sessões HTTP gerenciadas pelo Spring Security**, não JWT. O acesso administrativo permanecerá privado, inicialmente via Tailscale ou rede autenticada equivalente.
 
 ## 1. Requisitos e preparação
 
 - Backend Rivet, PostgreSQL e Flyway configurados.
 - JDK 21 e `curl` para os comandos abaixo.
 - `jq` para extrair o token CSRF nos exemplos; instalação opcional.
-- Perfil **diferente de `dev`**: nesse perfil as requisições são liberadas e CSRF está desabilitado.
+- Perfil **diferente de `dev`**: com autenticação e proteção CSRF habilitadas.
 
-Crie seu `.env` local a partir de `.env.example`, preencha as variáveis `DB_*` e de storage e adicione, **somente na primeira inicialização do banco**:
+Crie o seu `.env` local a partir de `.env.example`, preencha as variáveis `DB_*` e de storage e adicione, **somente na primeira inicialização do banco**:
 
 ```dotenv
 RIVET_BOOTSTRAP_EMAIL=admin@example.com
 RIVET_BOOTSTRAP_PASSWORD=substitua-por-uma-senha-forte
 ```
 
-As credenciais devem permanecer fora do código-fonte e do Git. O `.env` está ignorado pelo repositório. Para carregá-las no processo via terminal Linux:
-
-```bash
-set -a
-source .env
-set +a
-./gradlew bootRun
-```
-
-O comando `source .env` executa o conteúdo do arquivo como shell: utilize-o apenas com arquivo local confiável e sintaxe compatível. A importação opcional de `.env` pelo Spring não dispensa verificar se os valores `RIVET_BOOTSTRAP_*` foram resolvidos no processo de execução.
-
 O `InitialAdminProvisioner` executa a cada inicialização, mas cria usuário apenas quando o banco está vazio. Com o primeiro usuário já criado, não recria nem redefine sua senha. Remova a senha do ambiente depois do provisionamento. **Se o banco estiver vazio e faltar alguma credencial, a aplicação falhará na inicialização.**
+O Spring Boot importa o arquivo .env da raiz do projeto por meio de spring.config.import. As variáveis de bootstrap são mapeadas no application.properties e utilizadas pelo InitialAdminProvisioner na inicialização.
 
 > Não use o perfil `dev` para validar segurança. Não exponha a instância em HTTP fora de uma máquina ou rede local confiável. Em produção, exija HTTPS e cookies adequados.
 
@@ -57,27 +47,33 @@ Esperado: `401 Unauthorized`.
 
 ## 4. Fazer login
 
-No terminal que executa o `curl`, certifique-se de que `RIVET_BOOTSTRAP_EMAIL` e `RIVET_BOOTSTRAP_PASSWORD` estão exportadas. O login nativo do Spring Security espera **`application/x-www-form-urlencoded`**, não JSON:
+O login nativo do Spring Security recebe as credenciais do administrador por meio de **`application/x-www-form-urlencoded`**, não JSON.
+
+Utilize o e-mail e a senha definidos no provisionamento inicial, substituindo os valores ilustrativos abaixo:
 
 ```bash
 curl -i \
   -b cookies.txt \
   -c cookies.txt \
   -H "X-CSRF-TOKEN: $TOKEN" \
-  --data-urlencode "email=$RIVET_BOOTSTRAP_EMAIL" \
-  --data-urlencode "password=$RIVET_BOOTSTRAP_PASSWORD" \
+  --data-urlencode "email=admin@example.com" \
+  --data-urlencode "password=sua-senha-aqui" \
   http://localhost:8080/api/auth/login
 ```
 
-Esperado: `204 No Content` e sessão autenticada. Essas opções de `curl` são exemplos locais; fornecer senha em argumentos de processo pode expô-la a ferramentas de inspeção locais. Para produção, use o formulário protegido do frontend e HTTPS.
+Esperado: `204 No Content` e sessão autenticada.
 
-Em seguida, confirme:
+O comando reutiliza o cookie de sessão obtido anteriormente e envia o token CSRF no header `X-CSRF-TOKEN`. As credenciais são verificadas contra o administrador armazenado no PostgreSQL.
+
+**Atenção:** os comandos são exemplos para desenvolvimento local. Fornecer senhas diretamente em argumentos de processo pode expô-las a ferramentas de inspeção. Em produção, utilize o formulário protegido do frontend e HTTPS.
+
+Para verificar se a autenticação foi concluída, consulte:
 
 ```bash
 curl -i -b cookies.txt http://localhost:8080/api/auth/me
 ```
 
-Esperado: `200 OK`, com JSON que contém o email do usuário autenticado, sem hash de senha.
+Esperado: `200 OK`, com uma resposta JSON contendo o e-mail do administrador autenticado, sem expor o hash da senha.
 
 ## 5. Renovar CSRF após o login
 
@@ -129,7 +125,7 @@ rm -f cookies.txt
 
 ## 8. Problemas comuns
 
-**Login retorna `401`, mas o bootstrap funcionou:** confira se o terminal do `curl` realmente tem as variáveis exportadas. Reiniciar o backend com uma senha de bootstrap diferente **não altera** o hash de um administrador já criado.
+**Login retorna `401`, mas o bootstrap funcionou:** confira se o e-mail e a senha enviados na requisição correspondem às credenciais do administrador já cadastrado no PostgreSQL. Reiniciar o backend com uma senha de bootstrap diferente não altera o hash de um administrador existente.
 
 **Login retorna `403`:** o token CSRF pode estar ausente, incorreto, expirado ou associado a outra sessão. Busque `/csrf` com o mesmo cookie jar e repita o login.
 
@@ -139,6 +135,7 @@ rm -f cookies.txt
 
 ## 9. Verificações antes da produção
 
-O ciclo foi validado manualmente via `curl`; o último resultado **relatado** para a branch `feat/auth` foi de 12 testes automatizados de autenticação aprovados, com 117 testes totais. Ainda é necessário revisar o bootstrap para concorrência, garantir que cookies seguros são realmente enviados em HTTPS e verificar o comportamento HTTP/browser real. Rate limiting de login e endurecimento final serão avaliados na revisão de segurança da PR.
+O fluxo de autenticação foi validado manualmente e por testes automatizados. Na feat/auth, foram aprovados 12 testes de autenticação e 117 testes no total. A revisão posterior identificou melhorias de configuração e normalização de e-mails, tratadas na fix/auth-hardening.
+Permanecem pendentes a proteção contra provisionamento concorrente, a implementação de rate limiting em uma branch específica e a validação dos atributos dos cookies em um ambiente HTTPS real.
 
-Não publique o controle administrativo antes dessa revisão. Mesmo com Tailscale, autenticação, CSRF, validação de host SSH e autorização rigorosa continuam necessários, pois o Rivet administrará operações privilegiadas.
+O controle administrativo deve permanecer privado, preferencialmente via Tailscale. Antes de qualquer exposição em produção, devem ser validados HTTPS, cookies de sessão, autenticação e autorização. A integração SSH também exigirá verificação da identidade do servidor remoto.
