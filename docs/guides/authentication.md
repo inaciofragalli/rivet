@@ -21,6 +21,7 @@ RIVET_BOOTSTRAP_PASSWORD=substitua-por-uma-senha-forte
 ```
 
 O `InitialAdminProvisioner` executa a cada inicialização, mas cria usuário apenas quando o banco está vazio. Com o primeiro usuário já criado, não recria nem redefine sua senha. Remova a senha do ambiente depois do provisionamento. **Se o banco estiver vazio e faltar alguma credencial, a aplicação falhará na inicialização.**
+
 O Spring Boot importa o arquivo .env da raiz do projeto por meio de spring.config.import. As variáveis de bootstrap são mapeadas no application.properties e utilizadas pelo InitialAdminProvisioner na inicialização.
 
 > Não use o perfil `dev` para validar segurança. Não exponha a instância em HTTP fora de uma máquina ou rede local confiável. Em produção, exija HTTPS e cookies adequados.
@@ -136,6 +137,7 @@ rm -f cookies.txt
 ## 9. Verificações antes da produção
 
 O fluxo de autenticação foi validado manualmente e por testes automatizados. Na feat/auth, foram aprovados 12 testes de autenticação e 117 testes no total. A revisão posterior identificou melhorias de configuração e normalização de e-mails, tratadas na fix/auth-hardening.
+
 Permanecem pendentes a proteção contra provisionamento concorrente, a implementação de rate limiting em uma branch específica e a validação dos atributos dos cookies em um ambiente HTTPS real.
 
 O controle administrativo deve permanecer privado, preferencialmente via Tailscale. Antes de qualquer exposição em produção, devem ser validados HTTPS, cookies de sessão, autenticação e autorização. A integração SSH também exigirá verificação da identidade do servidor remoto.
