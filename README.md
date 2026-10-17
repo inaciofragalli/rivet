@@ -166,15 +166,11 @@ RIVET_SESSION_COOKIE_SECURE=false
 ```
 
 `RIVET_SESSION_COOKIE_SECURE=false` permite testar sessões por HTTP localmente. Em produção, utilize true e HTTPS. O valor padrão configurado no backend é true.
-O projeto importa opcionalmente `.env` como arquivo de propriedades por `spring.config.import=optional:file:./.env[.properties]`. Para garantir a disponibilização das variáveis `RIVET_BOOTSTRAP_*` ao `@Value` do bootstrap no desenvolvimento local, exporte-as para o processo, ou configure-as na IDE/ambiente de execução:
 
-```bash
-set -a
-source .env
-set +a
-```
-
-**Execute `source` somente em um `.env` local e confiável.** Nunca versione `.env`; ele já está no `.gitignore`. Depois de criar o administrador, retire a senha de bootstrap do ambiente. O banco guarda o hash, não a senha original.
+O Rivet carrega as configurações locais a partir do arquivo `.env` na raiz do projeto, utilizando a propriedade `spring.config.import` do Spring Boot.
+As credenciais do administrador inicial são definidas pelas variáveis `RIVET_BOOTSTRAP_EMAIL` e `RIVET_BOOTSTRAP_PASSWORD`, mapeadas no `application.properties`.
+Na inicialização, o `InitialAdminProvisioner` verifica se existem usuários cadastrados. Se o banco estiver vazio, cria o administrador com as credenciais configuradas, armazenando a senha como hash.
+Após o primeiro provisionamento, as credenciais de bootstrap podem ser retiradas do `.env`, pois o administrador já está persistido no PostgreSQL.
 
 ### Executar
 

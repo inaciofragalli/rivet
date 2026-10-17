@@ -209,6 +209,35 @@ class AuthenticationIntegrationTest {
                 .andExpect(status().isOk());
     }
 
+    @Test
+    void shouldAllowLoginWithEmailContainingWhitespaceAndMixedCase() throws Exception {
+        CsrfSession state = getCsrfSession();
+
+        mockMvc.perform(post("/api/auth/login")
+                        .session(state.session())
+                        .header("X-CSRF-TOKEN", state.token())
+                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                        .param("email", "  ADMIN@TEST.LOCAL  ")
+                        .param("password", TEST_PASSWORD))
+                .andExpect(status().isNoContent());
+
+        mockMvc.perform(get("/api/auth/me").session(state.session()))
+                .andExpectAll(
+                        status().isOk(),
+                        jsonPath("$.email").value(TEST_EMAIL)
+                );
+    }
+
+    @Test
+    void shouldExposeHealthCheckAnonymouslyWhileKeepingOtherActuatorEndpointsSecured() throws Exception {
+        mockMvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("UP"));
+
+        mockMvc.perform(get("/actuator/info"))
+                .andExpect(status().isUnauthorized());
+    }
+
     private CsrfSession getCsrfSession() throws Exception {
         MvcResult result = mockMvc.perform(get("/api/auth/csrf"))
                 .andExpect(status().isOk())
