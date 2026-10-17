@@ -1,6 +1,7 @@
 package io.github.inaciofragalli.rivet.server.internal;
 
 import io.github.inaciofragalli.rivet.server.ServerAlreadyExistsException;
+import io.github.inaciofragalli.rivet.server.ServerConnectionException;
 import io.github.inaciofragalli.rivet.server.ServerNotFoundException;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -53,5 +54,15 @@ public class ServerExceptionHandler {
         }
 
         throw Objects.requireNonNull(e, "Exception must not be null");
+    }
+
+    @ExceptionHandler(ServerConnectionException.class)
+    public ProblemDetail handleServerConnectionException(ServerConnectionException e) {
+        ProblemDetail problemDetail = ProblemDetail.forStatus(HttpStatus.BAD_GATEWAY);
+
+        problemDetail.setTitle("SSH connection failed");
+        problemDetail.setDetail("Could not establish a secure SSH connection");
+
+        return  problemDetail;
     }
 }

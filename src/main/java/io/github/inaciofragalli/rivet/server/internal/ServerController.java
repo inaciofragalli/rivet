@@ -1,5 +1,6 @@
 package io.github.inaciofragalli.rivet.server.internal;
 
+import io.github.inaciofragalli.rivet.server.ServerConnectionService;
 import io.github.inaciofragalli.rivet.server.ServerResponse;
 import io.github.inaciofragalli.rivet.server.ServerService;
 import jakarta.validation.Valid;
@@ -17,6 +18,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ServerController {
     private final ServerService serverService;
+    private final ServerConnectionService serverConnectionService;
 
     @PostMapping
     public ResponseEntity<ServerResponse> createServer(@Valid @RequestBody CreateServerRequest req) {
@@ -42,5 +44,12 @@ public class ServerController {
         List<ServerResponse> res = serverService.findAll();
 
         return ResponseEntity.ok(res);
+    }
+
+    @PostMapping("/{id}/test-connection")
+    public ResponseEntity<Void> testConnection(@PathVariable UUID id) {
+        serverConnectionService.verifyConnection(id);
+
+        return ResponseEntity.noContent().build();
     }
 }
