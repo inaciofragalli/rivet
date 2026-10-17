@@ -31,7 +31,7 @@ O Rivet é um projeto de plataforma self-hosted para implantar e gerenciar aplic
 
 O MVP é desenvolvido para um servidor Linux modesto, com foco em aprendizado e evolução incremental. Integrações com GitHub, builds automáticos, múltiplos nós e observabilidade avançada ficam para etapas futuras.
 
-> **Estado da versão documentada (`feat/auth`):** o backend cadastra e consulta aplicações e servidores, recebe arquivos de imagem Docker (`docker save`), armazena metadados e permite autenticação administrativa por sessão HTTP. O frontend já oferece upload, cadastro e listagem de aplicações. **Ainda não existe conexão SSH, `docker load` remoto, implantação, execução ou monitoramento de contêineres pelo Rivet.** A funcionalidade de autenticação está implementada na branch de trabalho e permanece sujeita à revisão da PR antes de integrar à `main`.
+> **Estado da versão documentada (`feat/server-ssh`):** o backend permite cadastrar e consultar aplicações e servidores, receber arquivos de imagem Docker (`docker save`), armazenar metadados e autenticar administradores por sessão HTTP. A integração com Apache MINA SSHD permite verificar a conectividade de servidores Linux usando autenticação por chave privada e validação da identidade do host por `known_hosts`. A conexão foi validada com um servidor Ubuntu real. O frontend já oferece funcionalidades de upload, cadastro e listagem de aplicações. **Ainda não existem transferência remota de imagens, execução Docker, deployments ou monitoramento operacional de contêineres pelo Rivet.**
 
 ## Repositórios e tecnologias
 
@@ -41,7 +41,6 @@ O MVP é desenvolvido para um servidor Linux modesto, com foco em aprendizado e 
 - **Documentação da API:** springdoc-openapi / Swagger UI.
 
 O backend é um monólito modular. Os módulos com implementação nesta etapa são [`application`](docs/architecture/modules/application.md), [`image`](docs/architecture/modules/image.md), [`server`](docs/architecture/modules/server.md), [`user`](docs/architecture/modules/user.md) e [`security`](docs/architecture/modules/security.md). A [visão de arquitetura](docs/architecture/overview.md) descreve as fronteiras e os componentes planejados.
-
 ## Funcionalidades disponíveis
 
 | Método | Endpoint | Comportamento |
@@ -53,20 +52,22 @@ O backend é um monólito modular. Os módulos com implementação nesta etapa s
 | `POST` | `/api/servers` | Cadastra nome, host, porta e usuário SSH; `201 Created` |
 | `GET` | `/api/servers` | Lista servidores cadastrados; `200 OK` |
 | `GET` | `/api/servers/{id}` | Consulta servidor por UUID; `200 OK` ou `404 Not Found` |
+| `POST` | `/api/servers/{id}/test-connection` | Verifica conexão e autenticação SSH; `204 No Content`, `404 Not Found` ou `502 Bad Gateway` |
 | `GET` | `/api/auth/csrf` | Entrega token CSRF associado à sessão; `200 OK` |
 | `POST` | `/api/auth/login` | Autentica email/senha via formulário e sessão HTTP; `204 No Content` |
-| `GET` | `/api/auth/me` | Retorna email autenticado; `200 OK`, ou `401` sem login |
+| `GET` | `/api/auth/me` | Retorna email autenticado; `200 OK` ou `401 Unauthorized` |
 | `POST` | `/api/auth/logout` | Invalida a sessão autenticada; `204 No Content` |
+| `GET` | `/actuator/health` | Verifica a saúde da aplicação, sem exigir autenticação; `200 OK` quando saudável |
 
-As quatro rotas de autenticação acima pertencem à implementação em `feat/auth`; estão sujeitas à revisão final antes de seu merge. Login e logout são processados pelos filtros do Spring Security, não por métodos correspondentes no `AuthController`.
+Login e logout são processados pelos filtros do Spring Security, não por métodos correspondentes no `AuthController`. A autenticação administrativa utiliza sessões HTTP, sem JWT.
 
 **Imagens e aplicações:** o upload recebe um arquivo de `docker save`, extrai nome, tag, arquitetura, SO e portas TCP declaradas, calcula SHA-256, armazena o arquivo localmente e persiste os metadados no PostgreSQL. O cadastro de aplicação exige `name`, `containerPort` e **exatamente uma** origem entre `image` e `imageArtifactId`. Nenhuma dessas operações inicia um contêiner.
 
-**Servidores:** o cadastro registra `name`, `host`, `sshPort` e `sshUsername`. Não estabelece conexão, não verifica host key e não confirma disponibilidade ou presença do Docker.
+**Servidores:** o cadastro registra `name`, `host`, `sshPort` e `sshUsername`. A integração com Apache MINA SSHD permite testar conexões SSH com autenticação por chave privada Ed25519 e verificação da identidade do servidor por `known_hosts`. O cliente rejeita hosts desconhecidos ou com chaves divergentes. As configurações são fornecidas externamente pelas variáveis `RIVET_SSH_PRIVATE_KEY_PATH` e `RIVET_SSH_KNOWN_HOSTS_PATH`, definidas no `.env.example`. A conexão foi validada com um servidor Ubuntu real, além de testes automatizados. Ainda não há execução de comandos remotos, transferência de imagens ou implantação de contêineres.
 
-**Segurança:** fora do perfil `dev`, endpoints administrativos exigem sessão autenticada; requisições que alteram estado são protegidas por CSRF. Não há registro público de usuários. O acesso ao painel deverá permanecer privado (Tailscale ou rede privada equivalente).
+**Segurança:** fora do perfil `dev`, endpoints administrativos exigem sessão autenticada e requisições que alteram estado são protegidas por CSRF, incluindo o teste de conexão SSH. Não há registro público de usuários. O acesso ao painel deverá permanecer privado (Tailscale ou rede privada equivalente). Chaves privadas SSH permanecem fora do banco de dados e do repositório.
 
-Erros de domínio tratados são retornados usando [Problem Details](https://www.rfc-editor.org/rfc/rfc9457) quando aplicável. Para detalhes, consulte a documentação específica de cada módulo.
+Erros de domínio tratados são retornados usando [Problem Details](https://www.rfc-editor.org/rfc/rfc9457) quando aplicável. Falhas de conexão SSH retornam uma mensagem genérica ao cliente, sem expor informações internas de autenticação ou infraestrutura. Para detalhes, consulte a documentação específica de cada módulo.
 
 ## Exemplo rápido: imagem pronta → aplicação cadastrada
 
@@ -126,8 +127,9 @@ Ficam fora do MVP: builds automáticos de Dockerfile, Kubernetes, agentes remoto
 - **Pendente de revisão de segurança da PR:** provisionamento concorrente, endurecimento do login (incluindo rate limiting) e testes HTTP reais de cookies. Testes MockMvc não comprovam o comportamento integral de um navegador.
 - CORS do perfil `dev` cobre `/api/**` e utiliza `RIVET_CORS_ALLOWED_ORIGIN` (padrão `http://localhost:5173`). CORS não substitui autenticação.
 - Upload limitado a 512 MiB; inspeção do conteúdo descompactado limitada a 2 GiB; cada arquivo de metadados limitado a 1 MiB. Esses controles não tornam uploads arbitrários seguros para exposição pública.
-- Não há ainda SSH, autenticação do host remoto, execução Docker, persistência de deployments, verificação de prontidão ou histórico operacional.
-- Não armazene chaves privadas SSH, senhas ou tokens em texto puro no banco. Mantenha backups do PostgreSQL e dos artefatos locais.
+- O endurecimento da autenticação ainda contempla melhorias futuras, incluindo rate limiting, MFA e validação dos atributos dos cookies em ambiente HTTPS real.
+- A conexão SSH utiliza chave privada configurada externamente e verificação obrigatória da host key por `known_hosts`. Servidores desconhecidos ou com chaves divergentes são rejeitados.
+- O Rivet já consegue verificar conexões SSH autenticadas, mas ainda não executa comandos remotos, transfere imagens Docker, persiste deployments, verifica prontidão ou mantém histórico operacional de contêineres.
 
 ## Desenvolvimento local
 
@@ -163,6 +165,9 @@ RIVET_BOOTSTRAP_EMAIL=admin@example.com
 RIVET_BOOTSTRAP_PASSWORD=troque-por-uma-senha-forte
 
 RIVET_SESSION_COOKIE_SECURE=false
+
+RIVET_SSH_PRIVATE_KEY_PATH=/caminho/absoluto/para/chave_privada
+RIVET_SSH_KNOWN_HOSTS_PATH=/caminho/absoluto/para/known_hosts
 ```
 
 `RIVET_SESSION_COOKIE_SECURE=false` permite testar sessões por HTTP localmente. Em produção, utilize true e HTTPS. O valor padrão configurado no backend é true.
@@ -171,6 +176,45 @@ O Rivet carrega as configurações locais a partir do arquivo `.env` na raiz do 
 As credenciais do administrador inicial são definidas pelas variáveis `RIVET_BOOTSTRAP_EMAIL` e `RIVET_BOOTSTRAP_PASSWORD`, mapeadas no `application.properties`.
 Na inicialização, o `InitialAdminProvisioner` verifica se existem usuários cadastrados. Se o banco estiver vazio, cria o administrador com as credenciais configuradas, armazenando a senha como hash.
 Após o primeiro provisionamento, as credenciais de bootstrap podem ser retiradas do `.env`, pois o administrador já está persistido no PostgreSQL.
+
+### Configurar conexão SSH
+
+O Rivet utiliza **Apache MINA SSHD** para estabelecer conexões SSH com servidores Linux cadastrados. A autenticação utiliza chave privada, enquanto a identidade do servidor é validada pelo arquivo `known_hosts`.
+
+Configure as seguintes variáveis no `.env`:
+
+```dotenv
+# SSH
+RIVET_SSH_PRIVATE_KEY_PATH=/caminho/absoluto/para/chave_privada
+RIVET_SSH_KNOWN_HOSTS_PATH=/caminho/absoluto/para/known_hosts
+```
+
+As variáveis já estão presentes no `.env.example`, mas seus valores são placeholders e precisam ser substituídos antes da utilização.
+
+- `RIVET_SSH_PRIVATE_KEY_PATH`: caminho da chave privada usada pelo Rivet para autenticação SSH. Não possui fallback automático.
+- `RIVET_SSH_KNOWN_HOSTS_PATH`: caminho do arquivo com as chaves públicas confiáveis dos servidores. Quando a variável não é definida, utiliza `${user.home}/.ssh/known_hosts`.
+
+Para preparar um servidor, é necessário autorizar a chave pública correspondente no `~/.ssh/authorized_keys` do usuário remoto e registrar sua host key no `known_hosts`, após verificar a fingerprint por um canal confiável.
+
+A chave privada deve permanecer fora do repositório, com permissões restritas. Hosts desconhecidos ou com chaves divergentes são rejeitados automaticamente.
+
+#### Testar conectividade
+
+Após cadastrar um servidor por `POST /api/servers`, utilize:
+
+```http
+POST /api/servers/{id}/test-connection
+```
+
+| Status | Significado |
+|---|---|
+| `204 No Content` | Conexão SSH e autenticação realizadas |
+| `404 Not Found` | Servidor não cadastrado |
+| `502 Bad Gateway` | Falha de conexão ou autenticação SSH |
+
+O endpoint exige autenticação administrativa e proteção CSRF fora do perfil `dev`.
+
+**Limitação atual:** a integração permite verificar conexões SSH, mas ainda não executa comandos remotos, transfere imagens Docker ou realiza deployments.
 
 ### Executar
 
@@ -211,7 +255,7 @@ Os testes de integração usam PostgreSQL 17 via Testcontainers e `@ServiceConne
 | [Visão da arquitetura](docs/architecture/overview.md) | Plano de controle, módulos, limites e fluxo futuro de deployment (Mermaid) |
 | [Módulo `application`](docs/architecture/modules/application.md) | Cadastro e consulta de aplicações |
 | [Módulo `image`](docs/architecture/modules/image.md) | Upload, inspeção TAR/GZIP, limites e persistência |
-| [Módulo `server`](docs/architecture/modules/server.md) | Registro e consultas de servidores, sem SSH |
+| [Módulo `server`](docs/architecture/modules/server.md) | Cadastro e consulta de servidores, conexão SSH segura e teste de conectividade |
 | [Módulo `user`](docs/architecture/modules/user.md) | Usuários, bootstrap e contratos de consulta/provisionamento |
 | [Módulo `security`](docs/architecture/modules/security.md) | Sessões, login, CSRF, endpoints e limites de segurança |
 | [Guia de upload](docs/guides/image-upload.md) | `docker save` → upload → cadastro |
@@ -234,7 +278,7 @@ rivet/
 │   │   ├── java/io/github/inaciofragalli/rivet/
 │   │   │   ├── application/           # Cadastro/consulta de aplicações
 │   │   │   ├── image/                 # Recebimento de imagens Docker
-│   │   │   ├── server/                # Cadastro de servidores
+│   │   │   ├── server/                # Cadastro de servidores e integração SSH
 │   │   │   ├── user/                  # Dados e provisionamento de usuários
 │   │   │   └── security/              # Autenticação, CSRF e sessões HTTP
 │   │   └── resources/db/migration/    # Migrações Flyway V1–V6
@@ -246,10 +290,9 @@ rivet/
 
 ## Próximas etapas
 
-1. Finalizar a `feat/auth`: documentação, PR, revisão de segurança e eventuais correções.
-2. Implementar conexão SSH segura com Apache MINA SSHD, autenticação por chave e validação da host key (`feat/server-ssh`).
-3. Desenvolver o módulo `deployment`: transferência/importação de imagem e execução Docker com estado persistido.
-4. Expandir o frontend para autenticação, servidores e deployments; integrar logs/estado operacional e publicação deliberada via HTTPS.
-5. Validar o primeiro deployment real no Ubuntu doméstico, com procedimentos de recuperação e administração privada.
+1. **Gerenciamento remoto:** ampliar a integração SSH para controlar o Docker nos servidores cadastrados.
+2. **Deployments:** implementar transferência de imagens, criação e gerenciamento de contêineres, histórico e recuperação de falhas.
+3. **Painel administrativo:** integrar gerenciamento de servidores, deployments, estados e logs ao frontend.
+4. **MVP operacional:** realizar o primeiro deployment completo em infraestrutura própria, com acesso administrativo privado e publicação HTTPS das aplicações.
 
-Após o MVP: imagens versionadas em registry, integração GitHub/CI, builds automatizados, stacks Compose e melhorias de observabilidade.
+Após o MVP: integração GitHub/CI, builds automáticos, múltiplos servidores, agentes remotos e observabilidade avançada.
