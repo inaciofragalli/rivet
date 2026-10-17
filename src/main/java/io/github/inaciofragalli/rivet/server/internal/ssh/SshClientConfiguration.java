@@ -19,10 +19,14 @@ public class SshClientConfiguration {
                                @Value("${rivet.ssh.private-key-path:}") String privateKeyPath) {
         SshClient  client = SshClient.setUpDefaultClient();
 
+        Path resolvedKnownHostsPath = knownHostsPath.isBlank()
+                ? Path.of(System.getProperty("user.home"), ".ssh", "known_hosts")
+                : Path.of(knownHostsPath);
+
         client.setServerKeyVerifier(
                 new KnownHostsServerKeyVerifier(
                         RejectAllServerKeyVerifier.INSTANCE,
-                        Path.of(knownHostsPath)
+                        resolvedKnownHostsPath
                 )
         );
 
